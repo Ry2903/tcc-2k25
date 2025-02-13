@@ -4,7 +4,7 @@ TCC em Análise e Desenvolvimento de Sistemas
 ### Tema:
 
 ### 👥 Colaboradores:
-- Arthur da Silva | Banco de Dados ([@example](https://github.com/Ry2903/tcc-2k25))
+- Arthur da Silva | Banco de Dados ([@WxespectroxW](https://github.com/WxespectroxW))
 - Maria Beatriz Fernandes Lopes | Front-End ([@mb-fernandes](https://github.com/mb-fernandes))
 - Melissa Rie Kanzato | Front-End ([@RieKanzato](https://github.com/RieKanzato))
 - Pedro Henrique Passos Martins | Full-Stack ([@pedro-hpm](https://github.com/pedro-hpm))
