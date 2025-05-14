@@ -1,5 +1,5 @@
 # 💾 TCC DS - 2025
-TCC em Análise e Desenvolvimento de Sistemas
+Trabalho de Conclusão de Curso em Análise e Desenvolvimento de Sistemas -  ETEC Professor Camargo Aranha
 
 ### Tema: Blink To Type
 #### Sobre o tema:
@@ -12,3 +12,7 @@ Desenvolvimento de um teclado virtual que possibilite a navegação na web para 
 - Pedro Henrique Passos Martins | Full-Stack ([@pedro-hpm](https://github.com/pedro-hpm))
 - Ryan Reis dos Santos | Product Owner/Documentation ([@Ry2903](https://github.com/Ry2903))
 - Sofia Ansanelo Martins | Quality Assurance/Scrum Master/Documentation ([@SofiAnsanelo](https://github.com/SofiAnsanelo))
+
+### 🚹 Orientadores:
+- Davi Vilar
+- Célide Tasso da Silva
