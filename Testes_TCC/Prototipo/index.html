@@ -6,10 +6,22 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div id="blink-detector">
+  <div id="blink-detector" style="position: relative;">
     <video id="videoEl" autoplay muted playsinline></video>
     <canvas id="overlay"></canvas>
-    <div id="confirmation"></div>
+    <!-- Confirmação visível sob o canvas -->
+    <div id="confirmation"  
+         style="position: absolute; 
+                bottom: 10px; 
+                left: 50%; 
+                transform: translateX(-50%);
+                background: rgba(0,0,0,0.6); 
+                color: #fff; 
+                padding: 6px 12px; 
+                border-radius: 4px;
+                font-size: 1.1em;
+                display: none;  /* começa oculto */"
+    ></div>
   </div>
 
   <script src="libs/face-api.min.js"></script>

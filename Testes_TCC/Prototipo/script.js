@@ -1,83 +1,83 @@
 const video = document.getElementById('videoEl');
 const canvas = document.getElementById('overlay');
 const confirmation = document.getElementById('confirmation');
+const piscas = document.getElementById('piscas');
 const ctx = canvas.getContext('2d');
 
+let blinkCounter = 0;
+let eyesClosed = false;
+const EAR_THRESHOLD = 0.25;      // ajuste após debugar
+const EAR_CONSEC_FRAMES = 3;     // quantos frames abaixo do limiar conta como fechar
+
 async function start() {
-  console.log("🟡 carregando modelos…");
   await Promise.all([
     faceapi.nets.tinyFaceDetector.loadFromUri('./models'),
     faceapi.nets.faceLandmark68Net.loadFromUri('./models')
   ]);
-  console.log("✅ modelos carregados");
 
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ video: {} });
     video.srcObject = stream;
-    console.log("📷 câmera iniciada");
   } catch (err) {
-    console.error("❌ erro câmera:", err);
+    console.error("Erro ao acessar câmera:", err);
     return;
   }
 
   video.addEventListener('playing', () => {
-    console.log("▶ vídeo playing — iniciando detecção");
-
-    // ajusta canvas ao tamanho real do vídeo
     canvas.width  = video.videoWidth;
     canvas.height = video.videoHeight;
-
-    let blinkCounter = 0;
-    const EAR_THRESHOLD = 0.25;
-    const EAR_CONSEC_FRAMES = 2;
-    let eyesClosed = false;
-
-    setInterval(async () => {
-      const detection = await faceapi
-        .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
-        .withFaceLandmarks();
-
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      if (!detection) {
-        if (eyesClosed) {
-          // reset se rosto some
-          blinkCounter = 0;
-          eyesClosed = false;
-        }
-        return;
-      }
-
-      // desenha detecção e landmarks
-      const resized = faceapi.resizeResults(detection, { width: canvas.width, height: canvas.height });
-      faceapi.draw.drawDetections(canvas, resized);
-      faceapi.draw.drawFaceLandmarks(canvas, resized);
-
-      const lm = detection.landmarks;
-      const leftEAR  = getEAR(lm.getLeftEye());
-      const rightEAR = getEAR(lm.getRightEye());
-      const avgEAR   = (leftEAR + rightEAR) / 2;
-
-      // detectar fechar
-      if (!eyesClosed && avgEAR < EAR_THRESHOLD) {
-        blinkCounter++;
-        if (blinkCounter >= EAR_CONSEC_FRAMES) {
-          eyesClosed = true;
-          console.log("👁️‍🗨️ olhos fechados (EAR=", avgEAR.toFixed(3), ")");
-        }
-      }
-
-      // detectar abrir após fechado
-      if (eyesClosed && avgEAR >= EAR_THRESHOLD) {
-        console.log("👁️ olhos abertos (EAR=", avgEAR.toFixed(3), ") → Piscada!");
-        confirmation.innerText = '✅ Piscou!';
-        setTimeout(() => confirmation.innerText = '', 800);
-        // reset
-        eyesClosed = false;
-        blinkCounter = 0;
-      }
-    }, 100);
+    onPlay();
   });
+}
+
+async function onPlay() {
+  if (video.paused || video.ended) return;
+
+  const detection = await faceapi
+    .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+    .withFaceLandmarks();
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  if (detection) {
+    const resized = faceapi.resizeResults(detection, {
+      width: canvas.width,
+      height: canvas.height
+    });
+    faceapi.draw.drawDetections(canvas, resized);
+    faceapi.draw.drawFaceLandmarks(canvas, resized);
+
+    const lm = detection.landmarks;
+    const leftEAR  = getEAR(lm.getLeftEye());
+    const rightEAR = getEAR(lm.getRightEye());
+    const avgEAR   = (leftEAR + rightEAR) / 2;
+
+    // DEBUG
+    //console.log("EAR =", avgEAR.toFixed(3));
+    confirmation.innerText = `EAR: ${avgEAR.toFixed(3)}`;
+
+    if (!eyesClosed && avgEAR < EAR_THRESHOLD) {
+      blinkCounter++;
+      if (blinkCounter >= EAR_CONSEC_FRAMES) {
+        eyesClosed = true;
+        console.log("👁️‍🗨️ olhos fechados");
+      }
+    }
+
+    if (eyesClosed && avgEAR >= EAR_THRESHOLD) {
+      console.log("👁️ olhos abertos → Piscada!");
+      confirmation.innerText = '<p>✅ Piscou!</p>';
+      piscas.innerText = '<p>✅ Piscou!</p>';
+      setTimeout(() => confirmation.innerText = '', 800);
+      eyesClosed = false;
+      blinkCounter = 0;
+    }
+  } else {
+    blinkCounter = 0;
+    eyesClosed = false;
+  }
+
+  requestAnimationFrame(onPlay);
 }
 
 function getEAR(eye) {
