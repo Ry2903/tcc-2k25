@@ -1,13 +1,19 @@
 const video = document.getElementById('videoEl');
 const canvas = document.getElementById('overlay');
-const confirmation = document.getElementById('confirmation');
 const piscas = document.getElementById('piscas');
 const ctx = canvas.getContext('2d');
 
-let blinkCounter = 0;
-let eyesClosed = false;
-const EAR_THRESHOLD = 0.25;      // ajuste após debugar
-const EAR_CONSEC_FRAMES = 3;     // quantos frames abaixo do limiar conta como fechar
+let totalBlinks = 0;
+let earBelowThresholdFrames = 0;
+let earAboveThresholdFrames = 0;
+
+let blinkInProgress = false;
+let debounceFrames = 0;
+
+const EAR_THRESHOLD = 0.269; // Limiar de fechamento dos olhos
+const EAR_CONSEC_FRAMES = 2; // Frames abaixo do limiar para confirmar fechamento
+const EAR_REOPEN_FRAMES = 2; // Pode manter igual ao fechamento ou ajustar
+const DEBOUNCE_AFTER_BLINK = 3; //Ajuste para piscadas curtas e para evitar piscadas duplas
 
 async function start() {
   await Promise.all([
@@ -24,7 +30,7 @@ async function start() {
   }
 
   video.addEventListener('playing', () => {
-    canvas.width  = video.videoWidth;
+    canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     onPlay();
   });
@@ -48,40 +54,52 @@ async function onPlay() {
     faceapi.draw.drawFaceLandmarks(canvas, resized);
 
     const lm = detection.landmarks;
-    const leftEAR  = getEAR(lm.getLeftEye());
+    const leftEAR = getEAR(lm.getLeftEye());
     const rightEAR = getEAR(lm.getRightEye());
-    const avgEAR   = (leftEAR + rightEAR) / 2;
+    const avgEAR = (leftEAR + rightEAR) / 2;
 
-    // DEBUG
-    //console.log("EAR =", avgEAR.toFixed(3));
-    confirmation.innerText = `EAR: ${avgEAR.toFixed(3)}`;
+    // Processo debounce pós-piscada
+    if (debounceFrames > 0) {
+      debounceFrames--;
+      requestAnimationFrame(onPlay);
+      return;
+    }
 
-    if (!eyesClosed && avgEAR < EAR_THRESHOLD) {
-      blinkCounter++;
-      if (blinkCounter >= EAR_CONSEC_FRAMES) {
-        eyesClosed = true;
-        console.log("👁️‍🗨️ olhos fechados");
+    if (avgEAR < EAR_THRESHOLD) {
+      earBelowThresholdFrames++;
+      earAboveThresholdFrames = 0;
+
+      if (!blinkInProgress && earBelowThresholdFrames >= EAR_CONSEC_FRAMES) {
+        blinkInProgress = true;
+        console.log("🔒 olhos fechados");
+      }
+    } else {
+      earAboveThresholdFrames++;
+      earBelowThresholdFrames = 0;
+
+      if (blinkInProgress && earAboveThresholdFrames >= EAR_REOPEN_FRAMES) {
+        blinkInProgress = false;
+        totalBlinks++;        
+        piscas.innerText = `✅ Piscou! Total: ${totalBlinks}`;
+        console.log("✅ Piscada detectada!");
+
+        // Inicia debounce para evitar contagem dupla
+        debounceFrames = DEBOUNCE_AFTER_BLINK;
       }
     }
-
-    if (eyesClosed && avgEAR >= EAR_THRESHOLD) {
-      console.log("👁️ olhos abertos → Piscada!");
-      confirmation.innerText = '<p>✅ Piscou!</p>';
-      piscas.innerText = '<p>✅ Piscou!</p>';
-      setTimeout(() => confirmation.innerText = '', 800);
-      eyesClosed = false;
-      blinkCounter = 0;
-    }
   } else {
-    blinkCounter = 0;
-    eyesClosed = false;
+    // Sem rosto detectado → resetar estados
+    earBelowThresholdFrames = 0;
+    earAboveThresholdFrames = 0;
+    blinkInProgress = false;
+    debounceFrames = 0;
   }
 
   requestAnimationFrame(onPlay);
 }
 
 function getEAR(eye) {
-  const [p1,p2,p3,p4,p5,p6] = eye;
+  const [p1, p2, p3, p4, p5, p6] = eye;
   const a = distance(p2, p6);
   const b = distance(p3, p5);
   const c = distance(p1, p4);
