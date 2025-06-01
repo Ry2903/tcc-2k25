@@ -1,31 +1,190 @@
+:root {
+  --bg-color: #2b2b2b;
+  --panel-color: #162D42;
+  --button-bg: #70add6;
+  --button-selected: #00cfff;
+  --button-text: #fff;
+  --input-bg: #8ed4ffa4;
+  --input-text: #fff;
+  --text-color: #eee;
+  --highlight: #8ED4FF;
+  --border-radius: 6px;
+  --gap: 10px;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
 body {
   font-family: sans-serif;
-  background: #f2f2f2;
-  padding: 20px;
+  background: var(--bg-color);
+  color: var(--text-color);
+  padding: 10px;
   text-align: center;
 }
 
-#blink-detector {
-  position: relative;
-  width: 320px;
-  height: 240px;
-  margin: 0 auto;
-  background: #000;
-  overflow: hidden;
+/* 1) GRID PRINCIPAL (revertido ao layout anterior) */
+#app-grid {
+  display: grid;
+  grid-template-areas:
+    "video controls"
+    "keyboard numpad";
+  grid-template-columns: auto auto;
+  grid-template-rows: auto auto;
+  gap: var(--gap);
+  justify-items: center;
+  align-items: start;
 }
 
+/* 2) VÍDEO (tamanho fixo) */
+#video-container {
+  grid-area: video;
+  position: relative;
+  width: 420px;
+  height: 260px;      /* retorna à altura fixa que você usava antes */
+  background: #000;
+  overflow: hidden;
+  border-radius: var(--border-radius);
+}
 #videoEl,
 #overlay {
   position: absolute;
-  top: 0;
-  left: 0;
+  top: 0; left: 0;
   width: 100%;
   height: 100%;
 }
 
+/* 3) CONTROLES (volta a ter largura automática, sem esticar) */
+#controls {
+  grid-area: controls;
+  background: var(--panel-color);
+  padding: 12px;
+  border-radius: var(--border-radius);
+  box-shadow: 0 0 5px rgba(0, 0, 0, 0.3);
+  /* removemos qualquer width fixa para voltar ao comportamento “auto” */
+}
+#controls h2 {
+  margin-bottom: 12px;
+  font-size: 1.2em;
+  text-align: left;
+}
+.config-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--gap);
+}
+.config-group {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+}
+.config-group label {
+  margin-bottom: 4px;
+  font-weight: bold;
+  color: var(--button-text);
+  font-size: 0.95em;
+}
+.config-buttons {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--input-bg);
+  padding: 6px 10px;
+  border-radius: var(--border-radius);
+}
+.config-buttons span {
+  flex: 1;
+  text-align: center;
+  color: var(--button-text);
+  font-size: 0.95em;
+}
+.config-buttons button {
+  background: var(--button-bg);
+  color: var(--button-text);
+  border: none;
+  border-radius: 4px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 0.9em;
+}
+.config-buttons button:hover {
+  background: var(--highlight);
+}
+
+/* 4) TECLADO ALFABÉTICO */
+#keyboard-panel {
+  grid-area: keyboard;
+  background: var(--panel-color);
+  padding: 10px;
+  border-radius: var(--border-radius);
+  border: 2px solid #0a2340;
+  width: 100%;
+}
+#output {
+  width: 100%;
+  padding: 6px;
+  font-size: 1.1em;
+  margin-bottom: 8px;
+  background: var(--input-bg);
+  color: var(--input-text);
+  border: none;
+  border-radius: var(--border-radius);
+}
+.grid-6cols {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  grid-gap: 6px;
+}
+#keyboard button {
+  padding: 10px 4px;
+  background: var(--button-bg);
+  border: none;
+  border-radius: 4px;
+  font-size: 1em;
+  font-weight: bold;
+  color: #000;
+  cursor: pointer;
+  min-height: 40px;
+}
+#keyboard button.selected {
+  background: var(--button-selected);
+}
+
+/* 5) NUMPAD */
+#numpad-panel {
+  grid-area: numpad;
+  background: var(--panel-color);
+  padding: 10px;
+  border-radius: var(--border-radius);
+  border: 2px solid #0a2340;
+  width: 100%;
+}
+.grid-3cols {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-gap: 6px;
+}
+#numpad button {
+  padding: 14px;
+  background: var(--button-bg);
+  border: none;
+  border-radius: 4px;
+  font-size: 1.2em;
+  color: var(--button-text);
+  cursor: pointer;
+}
+#numpad button.selected {
+  background: var(--button-selected);
+}
+
+/* 6) CONTADOR DE PISCADAS */
 #piscas {
   margin-top: 15px;
   font-size: 18px;
-  color: #333;
+  color: var(--highlight);
   font-weight: bold;
+  grid-column: 1 / -1;
+  text-align: center;
 }

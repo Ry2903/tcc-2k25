@@ -6,15 +6,84 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div id="blink-detector">
-    <video id="videoEl" autoplay muted playsinline></video>
-    <canvas id="overlay"></canvas>
+
+  <div id="app-grid">
+
+    <!-- 1) Vídeo + Canvas -->
+    <div id="video-container">
+      <video id="videoEl" autoplay muted playsinline></video>
+      <canvas id="overlay"></canvas>
+    </div>
+
+    <!-- 2) Controles (duas colunas) -->
+    <div id="controls">
+      <h2>Configurações</h2>
+      <div class="config-grid">
+
+        <div class="config-group">
+          <label for="thr">Threshold</label>
+          <div class="config-buttons">
+            <button id="thr-dec">&lt;</button>
+            <span id="threshold-val">0.269</span>
+            <button id="thr-inc">&gt;</button>
+          </div>
+        </div>
+
+        <div class="config-group">
+          <label for="frames">Frames Consecutivos</label>
+          <div class="config-buttons">
+            <button id="frm-dec">&lt;</button>
+            <span id="frames-val">2</span>
+            <button id="frm-inc">&gt;</button>
+          </div>
+        </div>
+
+        <div class="config-group">
+          <label for="debounce">Debounce</label>
+          <div class="config-buttons">
+            <button id="deb-dec">&lt;</button>
+            <span id="debounce-val">3</span>
+            <button id="deb-inc">&gt;</button>
+          </div>
+        </div>
+
+        <!-- Botão interruptor de detecção -->
+        <div class="config-group">
+          <label>&nbsp;</label>
+          <div class="config-buttons">
+            <button id="toggle-detection">Desativar Detecção</button>
+          </div>
+        </div>
+
+        <!-- Botão para alternar entre Teclado e Numpad -->
+        <div class="config-group">
+          <label>&nbsp;</label>
+          <div class="config-buttons">
+            <button id="toggle-mode">Usar Numpad</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- 3) Teclado Alfabético -->
+    <div id="keyboard-panel">
+      <input type="text" id="output" placeholder="Texto será exibido aqui" readonly />
+      <div id="keyboard" class="grid-6cols"></div>
+    </div>
+
+    <!-- 4) Numpad -->
+    <div id="numpad-panel">
+      <h2>Numpad</h2>
+      <div id="numpad" class="grid-3cols"></div>
+    </div>
+
   </div>
-
-  <!-- Exibição do total de piscadas -->
+  
   <div id="piscas">Total de piscadas: 0</div>
-
+  
   <script src="libs/face-api.min.js"></script>
+  <script src="teclado.js"></script>
   <script src="script.js"></script>
 </body>
 </html>
