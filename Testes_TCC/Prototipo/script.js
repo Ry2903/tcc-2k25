@@ -4,8 +4,8 @@ let detectionEnabled = true;
 // Parâmetros (usar let para permitir ajuste dinâmico)
 let EAR_THRESHOLD = 0.269;
 let EAR_CONSEC_FRAMES = 2;
-let EAR_REOPEN_FRAMES = 2;
-let DEBOUNCE_AFTER_BLINK = 3;
+let EAR_REOPEN_FRAMES = EAR_CONSEC_FRAMES;
+let DEBOUNCE_AFTER_BLINK = 0.5;
 
 // Contadores internos de piscada
 let totalBlinks = 0;
@@ -58,11 +58,11 @@ framesInc.addEventListener('click', () => {
 
 // Ajustar DEBOUNCE_AFTER_BLINK
 debDec.addEventListener('click', () => {
-  DEBOUNCE_AFTER_BLINK = Math.max(1, DEBOUNCE_AFTER_BLINK - 1);
+  DEBOUNCE_AFTER_BLINK = Math.max(1, DEBOUNCE_AFTER_BLINK - 0.01);
   debounceValSpan.innerText = DEBOUNCE_AFTER_BLINK;
 });
 debInc.addEventListener('click', () => {
-  DEBOUNCE_AFTER_BLINK++;
+  DEBOUNCE_AFTER_BLINK += 0.01;
   debounceValSpan.innerText = DEBOUNCE_AFTER_BLINK;
 });
 
