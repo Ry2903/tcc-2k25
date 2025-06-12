@@ -51,7 +51,7 @@ body {
 }
 
 #videoEl,
-#overlay {
+#overlay {  
   position: absolute;
   top: 0;
   left: 0;

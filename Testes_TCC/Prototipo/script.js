@@ -48,7 +48,7 @@ thrInc.addEventListener('click', () => {
 
 // Ajustar EAR_CONSEC_FRAMES
 framesDec.addEventListener('click', () => {
-  EAR_CONSEC_FRAMES = Math.max(1, EAR_CONSEC_FRAMES - 1);
+  EAR_CONSEC_FRAMES = Math.max(1, EAR_CONSEC_FRAMES - 0.1);
   framesValSpan.innerText = EAR_CONSEC_FRAMES;
 });
 framesInc.addEventListener('click', () => {

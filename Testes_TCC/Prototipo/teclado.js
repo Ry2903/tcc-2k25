@@ -22,7 +22,9 @@ let modo = 'keyboard';
 let cicloPrincipal = null;
 let innerCiclo = null;
 let selecionandoColuna = false;
+let contadorCiclosColuna = 0;
 
+const maxCiclosColuna = 4;
 const numColunas = 6;
 
 // Teclas consideradas especiais (usar estilo pálido)
@@ -137,6 +139,7 @@ function iniciarCicloTeclado() {
 
 function iniciarCicloColuna() {
   clearInterval(cicloPrincipal);
+  contadorCiclosColuna = 0; // zera o contador ao iniciar
   const linhaIdx = (currentLinha - 1 + Math.ceil(teclas.length / numColunas)) % Math.ceil(teclas.length / numColunas);
   const start = linhaIdx * numColunas;
   let col = 0;
@@ -144,12 +147,25 @@ function iniciarCicloColuna() {
   innerCiclo = setInterval(() => {
     // Limpa seleção de todas as colunas
     botoesTeclado.forEach(b => b.classList.remove('selected'));
+
     const index = start + col;
     if (index < botoesTeclado.length) {
       botoesTeclado[index].classList.add('selected');
     }
+
     currentColuna = col;
     col = (col + 1) % numColunas;
+
+    // Contabiliza uma volta completa
+    if (col === 0) {
+      contadorCiclosColuna++;
+      if (contadorCiclosColuna >= maxCiclosColuna) {
+        clearInterval(innerCiclo);
+        selecionandoColuna = false;
+        botoesTeclado.forEach(b => b.classList.remove('selected', 'row-selected'));
+        iniciarCicloTeclado();
+      }
+    }
   }, 1000);
 }
 
