@@ -1,5 +1,5 @@
 :root {
-  --bg-color: #2b2b2b;
+  --bg-color: hsl(0, 0%, 17%);
   --panel-color: #162D42;
   --button-bg: #70add6;
   --button-selected: #00cfff;
@@ -7,9 +7,14 @@
   --input-bg: #8ed4ffa4;
   --input-text: #fff;
   --text-color: #eee;
+  --select-linha: #328fce;
   --highlight: #8ED4FF;
   --border-radius: 6px;
-  --gap: 10px;
+  --key-w: 75px;
+  --key-h: 33.75px;
+  --gap-vertical: 8px;
+  --gap-horizontal: 14px;
+  --compound-gap: 3px;
 }
 
 * {
@@ -19,39 +24,34 @@
 }
 
 body {
-  font-family: sans-serif;
+  font-family: "Segoe UI", Roboto, Arial, sans-serif;
   background: var(--bg-color);
   color: var(--text-color);
   padding: 10px;
   text-align: center;
 }
 
-/* 1) GRID PRINCIPAL */
 #app-grid {
   display: grid;
-  grid-template-areas:
-    "video controls"
-    "keyboard numpad";
-  grid-template-columns: auto auto;
-  grid-template-rows: auto auto;
-  gap: var(--gap);
+  grid-template-areas: "video controls" "keyboard numpad";
+  grid-template-columns: auto 360px;
+  gap: 12px 18px;
   justify-items: center;
   align-items: start;
 }
 
-/* 2) VÍDEO */
 #video-container {
   grid-area: video;
   position: relative;
   width: 420px;
   height: 260px;
   background: #000;
-  overflow: hidden;
   border-radius: var(--border-radius);
+  overflow: hidden;
 }
 
 #videoEl,
-#overlay {  
+#overlay {
   position: absolute;
   top: 0;
   left: 0;
@@ -59,25 +59,25 @@ body {
   height: 100%;
 }
 
-/* 3) CONTROLES */
 #controls {
   grid-area: controls;
   background: var(--panel-color);
   padding: 12px;
   border-radius: var(--border-radius);
-  box-shadow: 0 0 5px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 0 5px rgba(0, 0, 0, .3);
+  width: 360px;
 }
 
 #controls h2 {
   margin-bottom: 12px;
-  font-size: 1.2em;
+  font-size: 1.15em;
   text-align: left;
 }
 
 .config-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: var(--gap);
+  gap: 10px;
 }
 
 .config-group {
@@ -86,27 +86,13 @@ body {
   text-align: left;
 }
 
-.config-group label {
-  margin-bottom: 4px;
-  font-weight: bold;
-  color: var(--button-text);
-  font-size: 0.95em;
-}
-
 .config-buttons {
   display: flex;
   align-items: center;
   justify-content: space-between;
   background: var(--input-bg);
   padding: 6px 10px;
-  border-radius: var(--border-radius);
-}
-
-.config-buttons span {
-  flex: 1;
-  text-align: center;
-  color: var(--button-text);
-  font-size: 0.95em;
+  border-radius: 6px;
 }
 
 .config-buttons button {
@@ -116,123 +102,215 @@ body {
   border-radius: 4px;
   padding: 6px 10px;
   cursor: pointer;
-  font-size: 0.9em;
+  font-size: .9em;
 }
 
 .config-buttons button:hover {
   background: var(--highlight);
 }
 
-/* 4) TECLADO ALFABÉTICO */
+/* keyboard panel */
 #keyboard-panel {
   grid-area: keyboard;
   background: var(--panel-color);
   padding: 10px;
   border-radius: var(--border-radius);
   border: 2px solid #0a2340;
-  width: 100%;
+  width: calc((var(--key-w) * 6) + (var(--gap-horizontal) * 5) + 40px);
 }
 
-/* Campo de texto de saída */
 #output {
   width: 100%;
-  padding: 6px;
-  font-size: 1.1em;
-  margin-bottom: 8px;
+  padding: 8px;
+  font-size: 1em;
+  margin-bottom: 10px;
   background: var(--input-bg);
   color: var(--input-text);
   border: none;
-  border-radius: var(--border-radius);
+  border-radius: 6px;
 }
 
-/* Grade de 6 colunas para teclado alfabético */
 .grid-6cols {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  grid-gap: 6px;
+  grid-template-columns: repeat(6, var(--key-w));
+  grid-auto-rows: var(--key-h);
+  column-gap: var(--gap-horizontal);
+  row-gap: var(--gap-vertical);
+  justify-content: center;
 }
 
-/* Botões do teclado alfabético */
-#keyboard button {
-  padding: 10px 4px;
-  background: var(--button-bg);
-  border: none;
-  border-radius: 4px;
-  font-size: 1em;
-  font-weight: bold;
-  color: #000;
-  cursor: pointer;
-  min-height: 40px;
-  transition: transform 0.1s ease, box-shadow 0.1s ease;
-}
-
-/* Teclas especiais (CAPS, backspace, ?, –, QU) */
-#keyboard button.key-special {
-  background: #97ecff;
-  color: #000;
-}
-
-/* Botão da letra selecionada (coluna) */
-#keyboard button.selected {
-  background: var(--button-selected);
-  color: #000;
-  font-weight: bold;
-}
-
-/* Visual de fileira ativa: aplica estilo discreto em cada botão */
-#keyboard button.row-selected:not(.selected) {
-  background: #328fce; /* tom mais claro de highlight */
-  color: #000;
-  font-weight: bold;
-}
-
-/* 5) NUMPAD (mais fino) */
 #numpad-panel {
   grid-area: numpad;
   background: var(--panel-color);
-  padding: 6px;             /* padding reduzido para ficar mais fino */
+  padding: 10px;
   border-radius: var(--border-radius);
   border: 2px solid #0a2340;
-  width: 80%;
+  width: 300px;
 }
 
 .grid-3cols {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  grid-gap: 4px;            /* gap menor */
+  grid-template-columns: repeat(3, var(--key-w));
+  grid-auto-rows: var(--key-h);
+  column-gap: var(--gap-horizontal);
+  row-gap: var(--gap-vertical);
+  justify-content: center;
 }
 
-/* Botões do numpad */
-#numpad button {
-  padding: 8px;             /* padding menor para botões mais finos */
+/* botão célula inteira */
+#keyboard>button,
+#numpad>button {
+  width: 100%;
+  height: 100%;
+  min-width: var(--key-w);
+  min-height: var(--key-h);
   background: var(--button-bg);
   border: none;
-  border-radius: 4px;
-  font-size: 1em;           /* fonte um pouco menor */
+  border-radius: 8px;
+  font-size: 1em;
+  font-weight: 700;
   color: #000;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
-  min-height: 36px;         /* altura reduzida */
+  transition: transform .06s ease;
 }
 
-/* Tecla do numpad selecionada */
-#numpad button.selected {
+/* wrapper compound (não pinta por si só para não criar "fundo escondido") */
+.compound-cell {
+  width: 100%;
+  height: 100%;
+  min-width: var(--key-w);
+  min-height: var(--key-h);
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform .06s ease;
+}
+
+/* hover */
+#keyboard>button:hover,
+#numpad>button:hover,
+#keyboard>.compound-cell .half-btn:hover {
+  transform: translateY(-2px);
+}
+
+/* selected / key-special (padrão) */
+#keyboard>button.selected,
+#keyboard .key-special.selected {
   background: var(--button-selected);
   color: #000;
-  font-weight: bold;
 }
 
-/* Teclas especiais do numpad (por exemplo, backspace "←") */
-#numpad button.key-special {
+#keyboard>button.key-special,
+#numpad>button.key-special,
+#keyboard .compound-cell .half-btn.key-special {
   background: #97ecff;
   color: #000;
 }
 
-/* 6) CONTADOR DE PISCADAS */
+/* row highlight — botoes inteiros (aplica direto aos botões normais) */
+#keyboard>button.row-selected {
+  background: var(--select-linha) !important;
+  color: #000;
+}
+
+
+/* coluna/seleção interna do half (quando column cycling seleciona um half) */
+#keyboard .compound-cell .half-btn.selected {
+  background: var(--button-selected) !important;
+  color: #000 !important;
+}
+
+/* layout compound / half-btn */
+.compound-cell {
+  display: flex;
+  flex-direction: row;
+  gap: var(--compound-gap);
+  width: 100%;
+  height: 100%;
+  align-items: stretch;
+  justify-content: center;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.compound-cell .half-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  width: 50%;
+  height: 100%;
+  border-radius: 6px;
+  border: none;
+  background: var(--button-bg);
+  color: #000;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0 6px;
+}
+
+/* ícones */
+.btn-icon {
+  width: 1.15em;
+  height: 1.15em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-icon.space-icon {
+  width: 1.9em;
+  height: 1.9em;
+}
+
+.btn-icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.btn-icon:not(.preserve) svg {
+  fill: currentColor;
+  stroke: currentColor;
+}
+
+/* numpad: mantém ícone/texto preto mesmo quando selecionado */
+#numpad>button.selected {
+  background: var(--button-selected) !important;
+  color: #000 !important;
+}
+
+#numpad>button.selected .btn-icon {
+  color: inherit !important;
+}
+
+/* icon-only config */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 8px;
+}
+
 #piscas {
   margin-top: 15px;
   font-size: 18px;
   color: var(--highlight);
   font-weight: bold;
-  grid-column: 1 / -1;
+  grid-column: 1/-1;
   text-align: center;
+}
+
+#keyboard .compound-cell.row-selected>.half-btn {
+  background: var(--select-linha) !important;
+  color: #000 !important;
 }
