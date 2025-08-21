@@ -40,7 +40,7 @@ let currentNumpadIndex = 0;
 
 const especiais = ['caps','?','–'];
 
-/* ---------------- ICON HELPERS (mantém compatibilidade com sua pasta /icons) */
+/* ---------------- ICON HELPERS (mantém compatibilidade com a pasta /icons) */
 const iconsCache = new Map();
 const PRESERVE_STYLES = new Set(['backspace','trash']);
 
@@ -116,6 +116,7 @@ async function preloadIcon(name){
 function getIconHTML(name){
   if(!name) return `<span class="btn-icon" aria-hidden="true"></span>`;
   if(iconsCache.has(name)) return iconsCache.get(name);
+  
   // fallback imediato
   const fallback = iconSVGFallback(name);
   iconsCache.set(name, fallback);
