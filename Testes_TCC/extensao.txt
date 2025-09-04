@@ -59,3 +59,31 @@ Então a ação de "Enter" deve ser realizada no campo de texto.
 Dado que o teclado flutuante tem a tecla "Backspace",
 Quando a pessoa pisca sobre a tecla "Backspace",
 Então o caractere mais recente no campo de texto deve ser apagado.
+
+Dado que o teclado flutuante tem a tecla "Interrogação",
+Quando a pessoa pisca sobre a tecla "Interrogação",
+Então o caractere de interrogação deve aparecer no campo de texto.
+
+Dado que o teclado flutuante tem a tecla "Configurações",
+Quando a pessoa pisca sobre a tecla "Configurações",
+Então o usuário deverá ser direcionado a área de configurações.
+
+Dado que o teclado flutuante tem a tecla "Espaço",
+Quando a pessoa pisca sobre a tecla "Espaço",
+Então será adicionado um caractere invisível no campo de texto.
+
+Dado que o teclado flutuante tem a tecla "Delete",
+Quando a pessoa pisca sobre a tecla "Delete",
+Então será apagado tudo que estava presente no campo de texto.
+
+Cenário 10: CapsLock ativado
+
+Dado que o teclado flutuante tem a tecla "CapsLock",
+Quando a pessoa pisca sobre a tecla "CapsLock",
+Então os caracteres seguintes devem estar maiúsculas.
+
+Cenário 11: CapsLock desativado
+
+Dado que o teclado flutuante tem a tecla "CapsLock",
+Quando a pessoa pisca sobre a tecla "CapsLock",
+Então os caracteres seguintes devem estar minúsculas.
