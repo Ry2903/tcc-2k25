@@ -1,0 +1,61 @@
+Como uma pessoa tetraplégica,
+Eu quero usar um teclado flutuante controlado por piscadas,
+Para poder digitar e interagir com dispositivos sem a necessidade de movimento físico.
+
+Cenário 1: Ativação do teclado flutuante
+
+Dado que o dispositivo está configurado corretamente,
+Quando a pessoa pisca os olhos,
+Então o teclado flutuante deve aparecer na tela.
+
+Cenário 2: Seleção de uma tecla
+
+Dado que o teclado flutuante está visível,
+Quando a pessoa pisca os olhos novamente sobre uma tecla,
+Então a tecla deve ser selecionada, e o caractere correspondente deve ser inserido no campo de texto.
+
+Cenário 3: Navegação pelas teclas
+
+Dado que o teclado flutuante está visível,
+Quando a pessoa pisca os olhos para navegar entre as teclas,
+Então o foco do cursor deve se mover para a próxima tecla em direção à direita ou à esquerda, de acordo com o movimento da piscada.
+
+Cenário 4: Confirmação de seleção (dupla piscada)
+
+Dado que a pessoa posicionou o foco em uma tecla desejada,
+Quando a pessoa pisca os olhos duas vezes rapidamente (duas piscadas rápidas),
+Então a tecla deve ser confirmada como selecionada e o caractere correspondente inserido no campo de texto.
+
+Cenário 5: Cancelamento da ação
+
+Dado que a pessoa está utilizando o teclado flutuante,
+Quando a pessoa pisca os olhos por um tempo mais longo (sinal de cancelamento),
+Então o foco do cursor deve voltar ao início ou a uma posição neutra do teclado, sem selecionar nenhum caractere.
+
+Cenário 6: Acessibilidade e Feedback
+
+Dado que a pessoa está usando o teclado flutuante,
+Quando a pessoa realiza uma piscada,
+Então o sistema deve fornecer um feedback visual (como uma cor de fundo ou animação) para indicar que a piscada foi detectada e que o teclado está pronto para a próxima ação.
+
+Cenário 7: Opções de personalização de sensibilidade
+
+Dado que o teclado flutuante está ativo,
+Quando a pessoa deseja ajustar a sensibilidade das piscadas,
+Então deve haver uma opção de menu que permita ajustar o tempo necessário para a piscada ser reconhecida, para acomodar diferentes níveis de controle.
+
+Cenário 8: Interrupção ou Pausa
+
+Dado que o teclado flutuante está ativo,
+Quando a pessoa não deseja mais usá-lo ou precisa de uma pausa,
+Então a pessoa pode realizar uma piscada longa (detecção de pausa) e o teclado deve ser temporariamente ocultado ou desativado até que a pessoa pisque novamente para reativá-lo.
+
+Cenário 9: Uso de teclas especiais (como Enter, Backspace, etc.)
+
+Dado que o teclado flutuante tem teclas especiais,
+Quando a pessoa pisca sobre a tecla "Enter",
+Então a ação de "Enter" deve ser realizada no campo de texto.
+
+Dado que o teclado flutuante tem a tecla "Backspace",
+Quando a pessoa pisca sobre a tecla "Backspace",
+Então o caractere mais recente no campo de texto deve ser apagado.
