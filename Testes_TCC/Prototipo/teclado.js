@@ -1,25 +1,16 @@
 const teclas = [
   'A','B','C','D',{ type:'action', action:'backspace', icon:'backspace' },
   { type:'compound', items: ['caps', { type: 'action', action: 'openTabs', icon: 'gear' }] },
-  'E','F','G','H','?', { type:'compound', items: ['–', { type:'action', action:'clearAll', icon:'trash' }] },
+  'E','F','G','H','?', { type:'compound', items: ['–', { type:'action', action: 'clearAll', icon:'trash' }] },
   'I','J','K','L','M','N',
   'O','P','QU','R','S','T',
   'U','V','W','X','Y','Z'
 ];
 
-const teclasNumpad = [
-  '1','2','3',
-  '4','5','6',
-  '7','8','9',
-  '0',
-  { type:'action', action:'backspace', icon:'backspace' },
-  { type:'action', action:'openTabs', icon:'gear' }
-];
-
 let capsAtivo = false;
-let botoesTeclado = []; // array de elementos: <button> ou <div.compound-cell>
-let botoesNumpad = [];
-let activeMode = 'keyboard';
+let botoesTeclado = []; // referencia linear dos elementos atualmente exibidos no #keyboard
+let botoesToolbar = [];
+let activeMode = 'keyboard'; // 'keyboard' | 'numpad' | 'toolbar'
 
 const numColunas = 6;
 const ROW_INTERVAL = 900;
@@ -36,119 +27,67 @@ let currentSub = 0;
 let colRounds = 0;
 let selectingColumn = false;
 
-let currentNumpadIndex = 0;
-
-const especiais = ['caps','?','–'];
-
-/* ---------------- ICON HELPERS (mantém compatibilidade com a pasta /icons) */
-const iconsCache = new Map();
+/* ---------------- ICON HELPERS ---------------- */
+const iconsCache = {};
 const PRESERVE_STYLES = new Set(['backspace','trash']);
 
-function wrapIconHTML(svgInner, name, preserve = false){
+function wrapIconHTML(svgInner, name, preserve=false){
   const cls = preserve ? 'btn-icon preserve' : 'btn-icon';
-  if(name === 'spacebar') {
-    return `<span class="${cls} space-icon" aria-hidden="true">${svgInner}</span>`;
-  }
+  if(name === 'spacebar') return `<span class="${cls} space-icon" aria-hidden="true">${svgInner}</span>`;
   return `<span class="${cls}" aria-hidden="true">${svgInner}</span>`;
 }
 
 function iconSVGFallback(name){
-  if(name === 'gear') {
-    return wrapIconHTML(`<svg viewBox="0 0 24 24" preserveAspectRatio="xMidYMid meet"><path d="M19.14 12.94c.04-.3.06-.61.06-.94s-.02-.64-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.61-.22l-2.39.96a7.03 7.03 0 0 0-1.62-.94l-.36-2.54A.5.5 0 0 0 12 2h-4a.5.5 0 0 0-.5.42l-.36 2.54c-.56.22-1.09.5-1.62.94l-2.39-.96a.5.5 0 0 0-.61.22L2.7 8.9a.5.5 0 0 0 .12.64l2.03 1.58c-.04.3-.06.61-.06.94s.02.64.06.94L2.82 15.6a.5.5 0 0 0-.12.64l1.92 3.32c.14.25.42.36.68.28l2.39-.96c.53.44 1.06.8 1.62.94l.36 2.54a.5.5 0 0 0 .5.42h4a.5.5 0 0 0 .5-.42l.36-2.54c.56-.22 1.09-.5 1.62-.94l2.39.96c.26.08.54-.03.68-.28l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15.5A3.5 3.5 0 1 1 15.5 12 3.5 3.5 0 0 1 12 15.5z"/></svg>`, name);
-  }
-  if(name === 'trash') {
-    return wrapIconHTML(`<svg viewBox="0 0 24 24" preserveAspectRatio="xMidYMid meet"><path d="M6 7h12v13a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V7zm3-4h6l1 1h3v2H2V4h3l1-1z"/></svg>`, name, PRESERVE_STYLES.has(name));
-  }
-  if(name === 'backspace') {
-    return wrapIconHTML(`<svg viewBox="0 0 16 16" preserveAspectRatio="xMidYMid meet"><path d="M15.683 3a2 2 0 0 0-2-2h-7.08a2 2 0 0 0-1.519.698L.241 7.35a1 1 0 0 0 0 1.302l4.843 5.65A2 2 0 0 0 6.603 15h7.08a2 2 0 0 0 2-2zM5.829 5.854a.5.5 0 1 1 .707-.708l2.147 2.147 2.146-2.147a.5.5 0 1 1 .707.708L9.39 8l2.146 2.146a.5.5 0 0 1-.707.708L8.683 8.707l-2.147 2.147a.5.5 0 0 1-.707-.708L7.976 8z"/></svg>`, name, PRESERVE_STYLES.has(name));
-  }
-  if(name === 'question') {
-    return wrapIconHTML(`<svg viewBox="0 0 24 24" preserveAspectRatio="xMidYMid meet"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 15h-2v-2h2v2zm1.07-7.75-.9.92A2 2 0 0 0 12 12h-2v-1a3 3 0 0 1 .88-2.12A2.99 2.99 0 0 1 13 7a3 3 0 0 1 0 6z"/></svg>`, name);
-  }
-  if(name === 'spacebar') {
-    return wrapIconHTML(`<svg viewBox="0 0 24 24" preserveAspectRatio="xMidYMid meet"><rect x="2" y="8" width="20" height="8" rx="2"/></svg>`, name);
-  }
+  if(name === 'gear') return wrapIconHTML(`<svg viewBox="0 0 24 24"><path d="M12 8a4 4 0 1 0 4 4 4 4 0 0 0-4-4z"/></svg>`, name);
+  if(name === 'trash') return wrapIconHTML(`<svg viewBox="0 0 24 24"><path d="M6 7h12v13a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V7z"/></svg>`, name, true);
+  if(name === 'backspace') return wrapIconHTML(`<svg viewBox="0 0 16 16"><path d="M15.683 3a2 2 0 0 0-2-2h-7.08a2 2 0 0 0-1.519.698L.241 7.35a1 1 0 0 0 0 1.302l4.843 5.65A2 2 0 0 0 6.603 15h7.08a2 2 0 0 0 2-2zM5.829 5.854a.5.5 0 1 1 .707-.708l2.147 2.147 2.146-2.147a.5.5 0 1 1 .707.708L9.39 8l2.146 2.146a.5.5 0 0 1-.707.708L8.683 8.707l-2.147 2.147a.5.5 0 0 1-.707-.708L7.976 8z"/></svg>`, name, true);
+  if(name === 'question') return wrapIconHTML(`<svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 15h-2v-2h2z"/></svg>`, name);
+  if(name === 'spacebar') return wrapIconHTML(`<svg viewBox="0 0 24 24"><rect x="2" y="8" width="20" height="8" rx="2"/></svg>`, name);
+  if(name === 'enter') return wrapIconHTML(`<svg viewBox="0 0 24 24"><path d="M5 12h10l-4-4 1.4-1.4L19 12l-6.6 6.4L10 17l4-4H5z"/></svg>`, name);
+  if(name === 'tools') return wrapIconHTML(`<svg viewBox="0 0 24 24"><path d="M2 2h20v20H2z"/></svg>`, name);
+  if(name === 'plus') return wrapIconHTML(`<svg viewBox="0 0 24 24"><path d="M11 11V5h2v6h6v2h-6v6h-2v-6H5v-2z"/></svg>`, name);
+  if(name === 'forward_tab') return wrapIconHTML(`<svg viewBox="0 0 24 24"><path d="M7 7h10v2H7z"/></svg>`, name);
+  if(name === 'forward_tab_rev') return wrapIconHTML(`<svg viewBox="0 0 24 24"><path d="M7 7h10v2H7z"/></svg>`, name);
+  if(name === 'x') return wrapIconHTML(`<svg viewBox="0 0 24 24"><path d="M6 6l12 12M6 18L18 6"/></svg>`, name);
+  if(name === '123' || name === 'abc') return wrapIconHTML(`<svg viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/></svg>`, name);
   return `<span class="btn-icon" aria-hidden="true"></span>`;
 }
 
-// carrega SVG externo e normaliza (preserva backspace/trash)
 async function preloadIcon(name){
   if(!name) return;
-  if(iconsCache.has(name)) return;
-  try {
-    const url = (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL)
-      ? chrome.runtime.getURL(`icons/${name}.svg`)
-      : `icons/${name}.svg`;
-    const resp = await fetch(url);
-    if(!resp.ok) throw new Error('SVG não encontrado: ' + url);
-    let svgText = await resp.text();
-    svgText = svgText.replace(/<\?xml[\s\S]*?\?>/i, '');
-    svgText = svgText.replace(/<!--[\s\S]*?-->/g, '');
-    svgText = svgText.replace(/\s(width|height)="[^"]*"/gi, '');
-    svgText = svgText.replace(/<svg([^>]*)>/i, (m, attrs) => {
+  if(iconsCache[name]) return;
+  try{
+    const resp = await fetch(`icons/${name}.svg`);
+    if(!resp.ok) throw new Error('SVG not found: ' + name);
+    let svg = await resp.text();
+    svg = svg.replace(/<\?xml[\s\S]*?\?>/i,'').replace(/<!--[\s\S]*?-->/g,'').replace(/\s(width|height)="[^"]*"/gi,'');
+    svg = svg.replace(/<svg([^>]*)>/i, (m, attrs) => {
       if(/preserveAspectRatio=/i.test(attrs)) return `<svg${attrs} width="100%" height="100%">`;
       return `<svg${attrs} preserveAspectRatio="xMidYMid meet" width="100%" height="100%">`;
     });
-
-    if(PRESERVE_STYLES.has(name)){
-      iconsCache.set(name, wrapIconHTML(svgText, name, true));
-      return;
-    }
-
-    svgText = svgText.replace(/(fill|stroke)=['"]([^'"]*)['"]/gi, (m, attr, val) => {
-      if(/currentColor/i.test(val) || /none/i.test(val)) return `${attr}="${val}"`;
-      return `${attr}="currentColor"`;
+    if(PRESERVE_STYLES.has(name)){ iconsCache[name] = wrapIconHTML(svg, name, true); return; }
+    svg = svg.replace(/(fill|stroke)=['"]([^'"]*)['"]/gi, (m,a,v) => {
+      if(/currentColor/i.test(v) || /none/i.test(v)) return `${a}="${v}"`;
+      return `${a}="currentColor"`;
     });
-
-    svgText = svgText.replace(/style=(['"])(.*?)\1/gi, (m,q,content) => {
-      let replaced = content.replace(/(fill\s*:\s*)([^;]+)(;?)/gi,'$1currentColor$3');
-      replaced = replaced.replace(/(stroke\s*:\s*)([^;]+)(;?)/gi,'$1currentColor$3');
-      return `style=${q}${replaced}${q}`;
-    });
-
-    iconsCache.set(name, wrapIconHTML(svgText, name, false));
-  } catch (err) {
-    console.warn('preloadIcon falhou para', name, err);
-    iconsCache.set(name, iconSVGFallback(name));
+    iconsCache[name] = wrapIconHTML(svg, name, false);
+  }catch(err){
+    iconsCache[name] = iconSVGFallback(name);
   }
 }
 
 function getIconHTML(name){
   if(!name) return `<span class="btn-icon" aria-hidden="true"></span>`;
-  if(iconsCache.has(name)) return iconsCache.get(name);
-  
-  // fallback imediato
-  const fallback = iconSVGFallback(name);
-  iconsCache.set(name, fallback);
-  return fallback;
+  if(iconsCache[name]) return iconsCache[name];
+  const fb = iconSVGFallback(name);
+  iconsCache[name] = fb;
+  // preload in background
+  preloadIcon(name).catch(()=>{});
+  return fb;
 }
 
-function preloadIcons(names = []) {
-  return Promise.all(names.map(n => preloadIcon(n)));
-}
-
-/* ----------------- UTILITÁRIOS DE APLICAÇÃO VISUAL ----------------- */
-
-/**
- * Aplica row-selected à célula (wrapper) e a todos os half-btns filhos.
- * Usa apenas classes (sem inline styles).
- */
-function applyRowToCell(wrapperEl){
-  if(!wrapperEl) return;
-  wrapperEl.classList.add('row-selected');
-  const halves = wrapperEl.querySelectorAll('.half-btn');
-  halves.forEach(h => h.classList.add('row-selected'));
-}
-
-/** Remove row-selected de wrapper e filhos */
-function clearRowFromCell(wrapperEl){
-  if(!wrapperEl) return;
-  wrapperEl.classList.remove('row-selected');
-  const halves = wrapperEl.querySelectorAll('.half-btn');
-  halves.forEach(h => h.classList.remove('row-selected'));
-}
-
-/* -------------------- LÓGICA DO TECLADO -------------------- */
+/* ---------------- formatting / behavior ---------------- */
+const especiais = ['caps','?','–'];
 
 function formatarLabel(item){
   if(typeof item === 'string'){
@@ -161,25 +100,27 @@ function formatarLabel(item){
 function processarTecla(item){
   const out = document.getElementById('output');
   if(!out) return;
+  // action object
   if(typeof item === 'object' && item.type === 'action'){
     if(item.action === 'clearAll'){ out.value = ''; return; }
     if(item.action === 'openTabs'){ document.dispatchEvent(new CustomEvent('keyboard:openTabs')); return; }
-    if(item.action === 'backspace'){ out.value = out.value.slice(0, -1); return; }
+    if(item.action === 'backspace'){ out.value = out.value.slice(0,-1); return; }
     return;
   }
   if(item === 'caps'){ capsAtivo = !capsAtivo; criarTeclado(); return; }
-  if(item === '–'){ out.value += ' '; return; }
+  if(item === 'enter'){ document.dispatchEvent(new CustomEvent('keyboard:enter', { detail: { value: out.value }})); return; }
+  if(item === 'space'){ out.value += ' '; return; }
   out.value += formatarLabel(item);
 }
 
-/* -------------------- CRIAÇÃO DO TECLADO E NUMPAD -------------------- */
-
+/* ---------------- build ABC keyboard ---------------- */
 function criarTeclado(){
   const container = document.getElementById('keyboard');
   if(!container) return;
   container.innerHTML = '';
   botoesTeclado = [];
 
+  // build keys from teclas[]
   teclas.forEach(item => {
     if(typeof item === 'object' && item.type === 'compound'){
       const wrapper = document.createElement('div');
@@ -190,20 +131,16 @@ function criarTeclado(){
         if(typeof sub === 'object' && sub.type === 'action'){
           half.innerHTML = getIconHTML(sub.icon || '');
           half.classList.add('key-special');
-          half.addEventListener('click', () => { if(activeMode !== 'keyboard') return; processarTecla(sub); resetSelection(); });
+          half.addEventListener('click', ()=>{ if(activeMode!=='keyboard') return; processarTecla(sub); resetSelection(); });
         } else {
-          if(sub === '?'){
-            half.innerHTML = getIconHTML('question');
-            half.classList.add('key-special');
-            half.addEventListener('click', () => { if(activeMode !== 'keyboard') return; processarTecla(sub); resetSelection(); });
-          } else if(sub === '–'){
+          if(sub === '–'){
             half.innerHTML = getIconHTML('spacebar');
             half.classList.add('key-special');
-            half.addEventListener('click', () => { if(activeMode !== 'keyboard') return; processarTecla(sub); resetSelection(); });
+            half.addEventListener('click', ()=>{ if(activeMode!=='keyboard') return; processarTecla('space'); resetSelection(); });
           } else {
             half.textContent = formatarLabel(sub);
             if(especiais.includes(sub)) half.classList.add('key-special');
-            half.addEventListener('click', () => { if(activeMode !== 'keyboard') return; processarTecla(sub); resetSelection(); });
+            half.addEventListener('click', ()=>{ if(activeMode!=='keyboard') return; processarTecla(sub); resetSelection(); });
           }
         }
         wrapper.appendChild(half);
@@ -217,64 +154,161 @@ function criarTeclado(){
     if(typeof item === 'object' && item.type === 'action'){
       btn.className = 'icon-btn key-special';
       btn.innerHTML = getIconHTML(item.icon || '');
-      btn.addEventListener('click', () => { if(activeMode !== 'keyboard') return; processarTecla(item); resetSelection(); });
+      btn.addEventListener('click', ()=>{ if(activeMode!=='keyboard') return; processarTecla(item); resetSelection(); });
     } else {
-      if(item === '?'){
-        btn.innerHTML = getIconHTML('question');
-        btn.classList.add('key-special');
-      } else if(item === '–'){
+      if(item === '–'){
         btn.innerHTML = getIconHTML('spacebar');
         btn.classList.add('key-special');
+        btn.addEventListener('click', ()=>{ if(activeMode!=='keyboard') return; processarTecla('space'); resetSelection(); });
       } else {
         btn.textContent = formatarLabel(item);
         if(especiais.includes(item)) btn.classList.add('key-special');
       }
-      btn.addEventListener('click', () => { if(activeMode !== 'keyboard') return; processarTecla(item); resetSelection(); });
+      btn.addEventListener('click', ()=>{ if(activeMode!=='keyboard') return; processarTecla(item); resetSelection(); });
     }
     container.appendChild(btn);
     botoesTeclado.push(btn);
   });
 
-  // limpa classes
-  botoesTeclado.forEach(el => {
-    if(el.classList){
-      el.classList.remove('row-selected','selected');
-      if(el.classList.contains('compound-cell')){
-        el.querySelectorAll('.half-btn').forEach(h => h.classList.remove('selected','row-selected'));
-      }
-    }
-  });
+  // append space-row at bottom (full width)
+  const spaceRow = document.createElement('button');
+  spaceRow.className = 'space-row';
+  spaceRow.innerHTML = getIconHTML('spacebar');
+  spaceRow.addEventListener('click', ()=>{ if(activeMode!=='keyboard') return; processarTecla('space'); resetSelection(); });
+  container.appendChild(spaceRow);
 
+  // set data-mode attribute
+  container.setAttribute('data-mode','keyboard');
+
+  // clear visual flags
+  botoesTeclado.forEach(el => { if(el.classList) el.classList.remove('row-selected','selected'); });
   currentRow = 0;
   selectingColumn = false;
 }
 
+/* ---------------- build NUMPAD ---------------- */
 function criarNumpad(){
-  const np = document.getElementById('numpad');
-  if(!np) return;
-  np.innerHTML = '';
-  botoesNumpad = [];
+  const container = document.getElementById('keyboard');
+  if(!container) return;
+  container.innerHTML = '';
+  botoesTeclado = [];
 
-  teclasNumpad.forEach(item => {
-    const btn = document.createElement('button');
-    if(typeof item === 'object' && item.type === 'action'){
-      btn.className = 'icon-btn key-special';
-      btn.innerHTML = getIconHTML(item.icon || '');
-      btn.addEventListener('click', () => { if(activeMode !== 'numpad') return; processarTecla(item); resetSelection(); });
-    } else {
-      btn.textContent = item;
-      btn.addEventListener('click', () => { if(activeMode !== 'numpad') return; processarTecla(item); resetSelection(); });
-    }
-    np.appendChild(btn);
-    botoesNumpad.push(btn);
+  const numbers = ['1','2','3','4','5','6','7','8','9','0'];
+
+  // first row: 1..5
+  for(let i=0;i<5;i++){
+    const b = document.createElement('button');
+    b.className = 'num-btn';
+    b.textContent = numbers[i];
+    b.dataset.value = numbers[i];
+    b.addEventListener('click', ()=>{ if(activeMode!=='numpad') return; processarTecla(numbers[i]); resetSelection(); });
+    container.appendChild(b);
+    botoesTeclado.push(b);
+  }
+
+  // special-wrapper (6th column) -> create as compound-cell-like to be compatible with selection code
+  const specialWrapper = document.createElement('div');
+  specialWrapper.className = 'compound-cell special-wrapper';
+  // specials: gear, trash, backspace, enter (distributed vertically)
+  const specials = [
+    { type:'action', action:'openTabs', icon:'gear' },
+    { type:'action', action:'clearAll', icon:'trash' },
+    { type:'action', action:'backspace', icon:'backspace' },
+    { type:'special', char:'enter', icon:'enter' }
+  ];
+  specials.forEach(s=>{
+    const sb = document.createElement('button');
+    // include half-btn class so selection code can iterate halves
+    sb.className = 'half-btn sp-btn key-special';
+    sb.innerHTML = getIconHTML(s.icon || '');
+    sb.addEventListener('click', ()=>{ if(activeMode!=='numpad') return;
+      if(s.type === 'action') processarTecla(s);
+      else if(s.type === 'special' && s.char === 'enter') processarTecla('enter');
+      resetSelection();
+    });
+    specialWrapper.appendChild(sb);
   });
+  container.appendChild(specialWrapper);
+  botoesTeclado.push(specialWrapper);
 
-  botoesNumpad.forEach(b => b.classList.remove('selected'));
-  currentNumpadIndex = 0;
+  // second row: 6..0
+  for(let i=5;i<10;i++){
+    const b = document.createElement('button');
+    b.className = 'num-btn';
+    b.textContent = numbers[i];
+    b.dataset.value = numbers[i];
+    b.addEventListener('click', ()=>{ if(activeMode!=='numpad') return; processarTecla(numbers[i]); resetSelection(); });
+    container.appendChild(b);
+    botoesTeclado.push(b);
+  }
+
+  // space-row at bottom (full width)
+  const spaceRow = document.createElement('button');
+  spaceRow.className = 'space-row';
+  spaceRow.innerHTML = getIconHTML('spacebar');
+  spaceRow.addEventListener('click', ()=>{ if(activeMode!=='numpad') return; processarTecla('space'); resetSelection(); });
+  container.appendChild(spaceRow);
+  botoesTeclado.push(spaceRow);
+
+  // set data-mode attribute
+  container.setAttribute('data-mode','numpad');
+
+  // clear visual flags
+  botoesTeclado.forEach(el => { if(el.classList) el.classList.remove('selected','row-selected'); });
+  currentRow = 0;
+  selectingColumn = false;
 }
 
-/* -------------------- CICLOS / HIGHLIGHTS -------------------- */
+/* ---------------- toolbar creation ---------------- */
+function criarToolbar(){
+  const root = document.getElementById('keyboard-root');
+  if(!root) return;
+  // if toolbar already exists, do nothing
+  if(root.querySelector('.toolbar')) return;
 
+  const toolbar = document.createElement('div');
+  toolbar.className = 'toolbar';
+  const group = document.createElement('div');
+  group.className = 'tool-group';
+
+  const buttons = [
+    { id:'tool-tools', icon:'tools', action:'tools' },
+    { id:'tool-plus',  icon:'plus', action:'plus' },
+    { id:'tool-back',  icon:'forward_tab_rev', action:'back' },
+    { id:'tool-fwd',   icon:'forward_tab', action:'forward' },
+    { id:'tool-x',     icon:'x', action:'x' },
+    { id:'tool-123',   icon:'123', action:'numpad' },
+    { id:'tool-abc',   icon:'abc', action:'alpha' }
+  ];
+
+  buttons.forEach(b=>{
+    const btn = document.createElement('button');
+    btn.className = 'tool-btn';
+    btn.id = b.id;
+    btn.innerHTML = getIconHTML(b.icon);
+    btn.dataset.action = b.action;
+    btn.addEventListener('click', ()=> {
+      if(b.action === 'numpad') setActivePanel('numpad');
+      else if(b.action === 'alpha') setActivePanel('keyboard');
+      else document.dispatchEvent(new CustomEvent('toolbar:action', { detail: { action: b.action } }));
+      resetSelection();
+    });
+    group.appendChild(btn);
+  });
+
+  toolbar.appendChild(group);
+
+  const existingKeyboard = document.getElementById('keyboard');
+  if(existingKeyboard && existingKeyboard.parentNode){
+    existingKeyboard.parentNode.insertBefore(toolbar, existingKeyboard);
+  } else {
+    root.appendChild(toolbar);
+  }
+
+  botoesToolbar = Array.from(toolbar.querySelectorAll('.tool-btn'));
+}
+
+/* ---------------- timers / highlights / cycles ---------------- */
 function stopAllTimers(){
   if(rowIntervalId){ clearInterval(rowIntervalId); rowIntervalId = null; }
   if(colIntervalId){ clearInterval(colIntervalId); colIntervalId = null; }
@@ -284,36 +318,35 @@ function stopAllTimers(){
   colRounds = 0;
 }
 
-function clearRowSelectionVisuals(){
+/* keyboard row highlight */
+function highlightRowImmediate(){
+  // clear previous
   botoesTeclado.forEach(el => {
-    if(el.classList && el.classList.contains('compound-cell')){
+    if(el.classList){
       el.classList.remove('row-selected','selected');
-      el.querySelectorAll('.half-btn').forEach(h => h.classList.remove('selected','row-selected'));
-    } else if(el.classList){
-      el.classList.remove('row-selected','selected');
+      if(el.classList.contains('compound-cell')){
+        el.querySelectorAll('.half-btn').forEach(h => h.classList.remove('selected','row-selected'));
+      }
     }
   });
-}
 
-function highlightRowImmediate(){
-  clearRowSelectionVisuals();
-  const totalRows = Math.ceil(teclas.length / numColunas);
+  const totalRows = Math.ceil(botoesTeclado.length / numColunas);
   const start = currentRow * numColunas;
   for(let i = start; i < start + numColunas && i < botoesTeclado.length; i++){
     const el = botoesTeclado[i];
     if(!el || !el.classList) continue;
-    // adiciona row-selected ao wrapper
-    el.classList.add('row-selected');
-    // e também explicitamente a cada half-btn dentro do wrapper (se houver)
     if(el.classList.contains('compound-cell')){
+      el.classList.add('row-selected');
       el.querySelectorAll('.half-btn').forEach(h => h.classList.add('row-selected'));
+    } else {
+      el.classList.add('row-selected');
     }
   }
   currentRow = (currentRow + 1) % totalRows;
 }
 
 function startRowCycle(withFirstDelay = true){
-  if(activeMode !== 'keyboard') return;
+  if(activeMode !== 'keyboard' && activeMode !== 'numpad') return;
   stopAllTimers();
   function doRow(){ highlightRowImmediate(); }
   if(withFirstDelay){
@@ -325,6 +358,7 @@ function startRowCycle(withFirstDelay = true){
   }
 }
 
+/* column cycle (works for keyboard and numpad) */
 function startColumnCycle(){
   if(rowIntervalId){ clearInterval(rowIntervalId); rowIntervalId = null; }
   if(initialTimeoutId){ clearTimeout(initialTimeoutId); initialTimeoutId = null; }
@@ -334,14 +368,20 @@ function startColumnCycle(){
   currentCol = 0;
   currentSub = 0;
 
-  const totalRows = Math.ceil(teclas.length / numColunas);
+  const totalRows = Math.ceil(botoesTeclado.length / numColunas);
   const lastRow = (currentRow - 1 + totalRows) % totalRows;
   const start = lastRow * numColunas;
 
-  clearRowSelectionVisuals();
+  // clear previous
+  botoesTeclado.forEach(el => {
+    if(el.classList) el.classList.remove('row-selected','selected');
+    if(el.classList && el.classList.contains('compound-cell')){
+      el.querySelectorAll('.half-btn').forEach(h => h.classList.remove('selected','row-selected'));
+    }
+  });
 
   colIntervalId = setInterval(()=>{
-    // limpa selects anteriores
+    // clear selection
     botoesTeclado.forEach(el => {
       if(el.classList && el.classList.contains('compound-cell')){
         el.querySelectorAll('.half-btn').forEach(h => h.classList.remove('selected'));
@@ -386,7 +426,7 @@ function startColumnCycle(){
       clearInterval(colIntervalId);
       colIntervalId = null;
       selectingColumn = false;
-      // limpar selects antes de voltar ao row cycle
+      // cleanup
       botoesTeclado.forEach(el => {
         if(el.classList && el.classList.contains('compound-cell')){
           el.querySelectorAll('.half-btn').forEach(h => h.classList.remove('selected','row-selected'));
@@ -400,27 +440,70 @@ function startColumnCycle(){
   }, ROW_INTERVAL);
 }
 
-/* seleção/identificação */
+/* ---------------- selection helpers ---------------- */
 function getCurrentlySelectedItemKeyboard(){
-  for(let i = 0; i < botoesTeclado.length; i++){
+  for(let i=0;i<botoesTeclado.length;i++){
     const el = botoesTeclado[i];
     if(el.classList && el.classList.contains('compound-cell')){
       const halves = el.querySelectorAll('.half-btn');
-      for(let h = 0; h < halves.length; h++){
-        if(halves[h].classList.contains('selected')) {
+      for(let h=0; h<halves.length; h++){
+        if(halves[h].classList.contains('selected')){
           const item = teclas[i];
           return (item && item.type === 'compound') ? item.items[h] : undefined;
         }
       }
     } else if(el.classList && el.classList.contains('selected')){
+      // btn index corresponds to teclas index for keyboard; for numpad buttons we return textContent
+      if(el.classList.contains('num-btn')) return el.textContent;
       return teclas[i];
     }
   }
   return undefined;
 }
 
+/* toolbar cycle (simple row highlight on toolbar buttons) */
+let toolbarRowIntervalId = null;
+let toolbarIndex = 0;
+function stopToolbarTimers(){
+  if(toolbarRowIntervalId){ clearInterval(toolbarRowIntervalId); toolbarRowIntervalId = null; }
+  toolbarIndex = 0;
+  botoesToolbar.forEach(b => b.classList.remove('selected','row-selected'));
+}
+function highlightToolbarImmediate(){
+  if(!botoesToolbar || !botoesToolbar.length) return;
+  botoesToolbar.forEach(b => b.classList.remove('row-selected'));
+  botoesToolbar[toolbarIndex].classList.add('row-selected');
+  toolbarIndex = (toolbarIndex + 1) % botoesToolbar.length;
+}
+function startToolbarCycle(withFirstDelay = true){
+  stopToolbarTimers();
+  if(!botoesToolbar || !botoesToolbar.length) return;
+  function doRow(){ highlightToolbarImmediate(); }
+  if(withFirstDelay){
+    doRow();
+    toolbarRowIntervalId = setInterval(doRow, ROW_INTERVAL);
+  } else {
+    toolbarRowIntervalId = setInterval(doRow, ROW_INTERVAL);
+    doRow();
+  }
+}
+
+/* seleciona tecla atual (confirm) */
 function selecionarTeclaAtual(){
-  if(activeMode !== 'keyboard') return;
+  if(activeMode === 'toolbar'){
+    const sel = botoesToolbar.find(b => b.classList.contains('row-selected') || b.classList.contains('selected'));
+    if(sel){
+      const action = sel.dataset.action;
+      if(action === 'numpad') setActivePanel('numpad');
+      else if(action === 'alpha') setActivePanel('keyboard');
+      else document.dispatchEvent(new CustomEvent('toolbar:action:exec', { detail: { action } }));
+    } else {
+      startToolbarCycle();
+    }
+    resetSelection();
+    return;
+  }
+
   if(!selectingColumn) startColumnCycle();
   else {
     const item = getCurrentlySelectedItemKeyboard();
@@ -429,118 +512,111 @@ function selecionarTeclaAtual(){
   }
 }
 
+/* selecionarTeclaNumpadAtual (compat) */
 function selecionarTeclaNumpadAtual(){
+  // fallback to same logic for numpad: if not selectingColumn -> startColumnCycle; else confirm
   if(activeMode !== 'numpad') return;
-  if(!botoesNumpad.length) return;
-  const val = teclasNumpad[currentNumpadIndex];
-  processarTecla(val);
-  resetSelection();
+  if(!selectingColumn) startColumnCycle();
+  else {
+    const item = getCurrentlySelectedItemKeyboard();
+    if(item !== undefined) processarTecla(item);
+    resetSelection();
+  }
 }
 
-function startNumpadCycle(){
-  if(activeMode !== 'numpad') return;
-  stopAllTimers();
-  botoesNumpad.forEach(b => b.classList.remove('selected'));
-  currentNumpadIndex = 0;
-  if(botoesNumpad.length) botoesNumpad[currentNumpadIndex].classList.add('selected');
-  rowIntervalId = setInterval(()=>{
-    botoesNumpad.forEach(b => b.classList.remove('selected'));
-    currentNumpadIndex = (currentNumpadIndex + 1) % botoesNumpad.length;
-    botoesNumpad[currentNumpadIndex].classList.add('selected');
-  }, ROW_INTERVAL);
-}
-
+/* ---------------- reset / set mode ---------------- */
 function resetSelection(){
   stopAllTimers();
+  stopToolbarTimers();
   botoesTeclado.forEach(el => {
     if(el.classList && el.classList.contains('compound-cell')){
       el.classList.remove('row-selected','selected');
       el.querySelectorAll('.half-btn').forEach(h => h.classList.remove('selected','row-selected'));
-    } else if(el.classList) {
+    } else if(el.classList){
       el.classList.remove('row-selected','selected');
     }
   });
-  botoesNumpad.forEach(b => b.classList.remove('selected'));
   currentRow = 0;
   currentCol = 0;
   currentSub = 0;
-  currentNumpadIndex = 0;
   selectingColumn = false;
   colRounds = 0;
-  if(activeMode === 'keyboard') startRowCycle(true);
-  else startNumpadCycle();
+
+  if(activeMode === 'keyboard' || activeMode === 'numpad') startRowCycle(true);
+  else if(activeMode === 'toolbar') startToolbarCycle(true);
 }
 
 function setActiveMode(mode){
-  if(mode !== 'keyboard' && mode !== 'numpad') return;
+  if(mode !== 'keyboard' && mode !== 'numpad' && mode !== 'toolbar') return;
   activeMode = mode;
+
   const kbBtn = document.getElementById('toggle-keyboard');
   const npBtn = document.getElementById('toggle-numpad');
   if(kbBtn) kbBtn.classList.toggle('active', mode === 'keyboard');
   if(npBtn) npBtn.classList.toggle('active', mode === 'numpad');
+
+  if(mode === 'keyboard') criarTeclado();
+  else if(mode === 'numpad') criarNumpad();
+  else if(mode === 'toolbar'){
+    // keep keyboard underlying, but start toolbar
+    criarTeclado();
+    criarToolbar();
+  }
+
   resetSelection();
 }
 
-/* init */
+function setActivePanel(panelName){
+  if(panelName === 'keyboard') setActiveMode('keyboard');
+  else if(panelName === 'numpad') setActiveMode('numpad');
+  else if(panelName === 'toolbar') setActiveMode('toolbar');
+}
+
+/* ---------------- init ---------------- */
 async function init(){
-  await preloadIcons(['backspace','gear','question','spacebar','trash']).catch(()=>{});
-  criarTeclado();
-  criarNumpad();
+  // preload common icons (best-effort)
+  const toPreload = ['backspace','gear','trash','question','spacebar','enter','tools','plus','forward_tab','forward_tab_rev','x','123','abc'];
+  await Promise.all(toPreload.map(n => preloadIcon(n).catch(()=>{})));
 
-  const kp = document.getElementById('keyboard-panel'); if(kp) kp.style.display = '';
-  const np = document.getElementById('numpad-panel'); if(np) np.style.display = '';
-
-  const kbBtn = document.getElementById('toggle-keyboard');
-  const npBtn = document.getElementById('toggle-numpad');
-  const detBtn = document.getElementById('toggle-detection');
-
-  /* ------------- ALTERAÇÃO PRINCIPAL: toggle-detection textual ------------- */
-  if(detBtn){
-    // estado inicial: detection desligada
-    detBtn.setAttribute('data-detection-active','false');
-    detBtn.classList.remove('active');
-    detBtn.textContent = 'Ativar detecção'; // texto inicial
-    detBtn.setAttribute('aria-pressed','false');
-
-    // função de atualização visual/textual
-    const updateDetectionButton = (el, active) => {
-      if(!el) return;
-      if(active){
-        el.textContent = 'Desativar detecção';
-        el.classList.add('active');
-        el.setAttribute('aria-pressed','true');
-      } else {
-        el.textContent = 'Ativar detecção';
-        el.classList.remove('active');
-        el.setAttribute('aria-pressed','false');
-      }
-    };
-
-    detBtn.onclick = () => {
-      const cur = detBtn.getAttribute('data-detection-active') === 'true';
-      const next = !cur;
-      detBtn.setAttribute('data-detection-active', String(next));
-      updateDetectionButton(detBtn, next);
-      // despacha evento custom para o restante da app reagir
-      document.dispatchEvent(new CustomEvent('detection:toggled', { detail: { active: next } }));
-    };
+  // ensure keyboard-root exists inside DOM
+  const kp = document.getElementById('keyboard-panel');
+  if(kp){
+    let root = document.getElementById('keyboard-root');
+    if(!root){
+      root = document.createElement('div');
+      root.id = 'keyboard-root';
+      // put keyboard-root at top of keyboard-panel to match CSS hierarchy
+      kp.appendChild(root);
+    }
+    // create keyboard container if missing
+    let kb = document.getElementById('keyboard');
+    if(!kb){
+      kb = document.createElement('div');
+      kb.id = 'keyboard';
+      kb.className = 'grid-6cols';
+      root.appendChild(kb);
+    }
   }
 
-  /* ------------------------------------------------------------------------- */
+  criarToolbar(); // create toolbar DOM (hidden until used)
+  criarTeclado(); // build abc keyboard initially
+  // criarNumpad not strictly necessary now, will be built when mode set to numpad
 
-  if(kbBtn){ kbBtn.textContent = 'ABC'; kbBtn.title='Ativar Teclado'; kbBtn.onclick = () => setActiveMode('keyboard'); }
-  if(npBtn){ npBtn.textContent = '123'; npBtn.title='Ativar Numpad'; npBtn.onclick = () => setActiveMode('numpad'); }
+  // wire toggle buttons in controls (text labels are in HTML)
+  const kbBtn = document.getElementById('toggle-keyboard');
+  const npBtn = document.getElementById('toggle-numpad');
+  if(kbBtn) { kbBtn.textContent = 'ABC'; kbBtn.onclick = ()=> setActiveMode('keyboard'); }
+  if(npBtn) { npBtn.textContent = '123'; npBtn.onclick = ()=> setActiveMode('numpad'); }
 
-  if(kbBtn) kbBtn.classList.toggle('active', activeMode === 'keyboard');
-  if(npBtn) npBtn.classList.toggle('active', activeMode === 'numpad');
-
+  // start in keyboard mode
   setActiveMode(activeMode);
 }
 
+/* expose API to window (used by script.js blink handler) */
 window.selecionarTeclaAtual = selecionarTeclaAtual;
 window.selecionarTeclaNumpadAtual = selecionarTeclaNumpadAtual;
 window.resetSelection = resetSelection;
-window.toggleCaps = () => { capsAtivo = !capsAtivo; criarTeclado(); };
+window.toggleCaps = ()=> { capsAtivo = !capsAtivo; criarTeclado(); };
 
-document.addEventListener('keyboard:openTabs', () => { console.log('keyboard:openTabs disparado'); });
-document.addEventListener('DOMContentLoaded', () => { init().catch(console.error); });
+// init on DOM ready
+document.addEventListener('DOMContentLoaded', ()=> { init().catch(console.error); });

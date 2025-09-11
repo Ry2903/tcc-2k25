@@ -15,8 +15,13 @@
   --gap-vertical: 8px;
   --gap-horizontal: 14px;
   --compound-gap: 3px;
+  /* toolbar / numpad specific */
+  --toolbar-bg: #49647C;
+  --toolbar-btn-bg: rgba(151, 164, 175, 0.5);
+  --numpad-scale: 1.0;
 }
 
+/* reset / base */
 * {
   box-sizing: border-box;
   margin: 0;
@@ -31,9 +36,10 @@ body {
   text-align: center;
 }
 
+/* layout grid */
 #app-grid {
   display: grid;
-  grid-template-areas: "video controls" "keyboard numpad";
+  grid-template-areas: "video controls" "keyboard .";
   grid-template-columns: auto 360px;
   gap: 12px 18px;
   justify-items: center;
@@ -59,6 +65,7 @@ body {
   height: 100%;
 }
 
+/* controls */
 #controls {
   grid-area: controls;
   background: var(--panel-color);
@@ -130,6 +137,92 @@ body {
   border-radius: 6px;
 }
 
+/* =========================
+   TOOLBAR
+   ========================= */
+.toolbar {
+  background: var(--toolbar-bg);
+  border-radius: 6px;
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  min-height: 40px;
+  box-sizing: border-box;
+}
+
+/* group uses space-around */
+.toolbar .tool-group {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  width: 100%;
+  gap: 8px;
+}
+
+.toolbar .tool-btn {
+  width: 2.6em;
+  height: 2.6em;
+  border-radius: 50%;
+  background: var(--toolbar-btn-bg);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border: none;
+  transition: transform .08s ease, background .08s ease;
+  padding: 6px;
+  box-sizing: border-box;
+}
+
+.toolbar .tool-btn .btn-icon {
+  width: 100%;
+  height: 100%;
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.toolbar .tool-btn:hover {
+  transform: translateY(-3px);
+}
+
+.toolbar .tool-btn.invert .btn-icon svg {
+  transform: scaleX(-1);
+}
+
+/* larger visible area for abc/123 buttons (units fixed) */
+#tool-123,
+#tool-abc {
+  width: 2.8em !important;
+  height: 2.8em !important;
+  min-width: 2.8em !important;
+  min-height: 2.8em !important;
+  padding: 0.12em !important;
+  box-sizing: border-box !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#tool-123 .btn-icon,
+#tool-abc .btn-icon {
+  width: 100% !important;
+  height: 100% !important;
+  padding: 0 !important;
+}
+
+#tool-123 .btn-icon svg,
+#tool-abc .btn-icon svg {
+  width: 92% !important;
+  height: 92% !important;
+  display: block !important;
+}
+
+/* keyboard grid */
 .grid-6cols {
   display: grid;
   grid-template-columns: repeat(6, var(--key-w));
@@ -139,27 +232,9 @@ body {
   justify-content: center;
 }
 
-#numpad-panel {
-  grid-area: numpad;
-  background: var(--panel-color);
-  padding: 10px;
-  border-radius: var(--border-radius);
-  border: 2px solid #0a2340;
-  width: 300px;
-}
-
-.grid-3cols {
-  display: grid;
-  grid-template-columns: repeat(3, var(--key-w));
-  grid-auto-rows: var(--key-h);
-  column-gap: var(--gap-horizontal);
-  row-gap: var(--gap-vertical);
-  justify-content: center;
-}
-
-/* botão célula inteira */
+/* botão célula inteira (teclado) */
 #keyboard>button,
-#numpad>button {
+#keyboard>div.compound-cell {
   width: 100%;
   height: 100%;
   min-width: var(--key-w);
@@ -175,14 +250,13 @@ body {
   justify-content: center;
   cursor: pointer;
   transition: transform .06s ease;
+  box-sizing: border-box;
 }
 
-/* wrapper compound (não pinta por si só para não criar "fundo escondido") */
+/* compound wrapper */
 .compound-cell {
   width: 100%;
   height: 100%;
-  min-width: var(--key-w);
-  min-height: var(--key-h);
   background: transparent;
   border: none;
   border-radius: 8px;
@@ -194,12 +268,11 @@ body {
 
 /* hover */
 #keyboard>button:hover,
-#numpad>button:hover,
 #keyboard>.compound-cell .half-btn:hover {
   transform: translateY(-2px);
 }
 
-/* selected / key-special (padrão) */
+/* selected / key-special */
 #keyboard>button.selected,
 #keyboard .key-special.selected {
   background: var(--button-selected);
@@ -207,23 +280,15 @@ body {
 }
 
 #keyboard>button.key-special,
-#numpad>button.key-special,
 #keyboard .compound-cell .half-btn.key-special {
   background: #97ecff;
   color: #000;
 }
 
-/* row highlight — botoes inteiros (aplica direto aos botões normais) */
+/* row highlight */
 #keyboard>button.row-selected {
   background: var(--select-linha) !important;
   color: #000;
-}
-
-
-/* coluna/seleção interna do half (quando column cycling seleciona um half) */
-#keyboard .compound-cell .half-btn.selected {
-  background: var(--button-selected) !important;
-  color: #000 !important;
 }
 
 /* layout compound / half-btn */
@@ -241,8 +306,6 @@ body {
 
 .compound-cell .half-btn {
   flex: 1 1 0;
-  min-width: 0;
-  min-height: 0;
   width: 50%;
   height: 100%;
   border-radius: 6px;
@@ -255,20 +318,21 @@ body {
   justify-content: center;
   cursor: pointer;
   padding: 0 6px;
+  box-sizing: border-box;
 }
 
-/* ícones */
+/* icons */
 .btn-icon {
-  width: 1.15em;
-  height: 1.15em;
+  width: 1.6em;
+  height: 1.6em;
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
 
 .btn-icon.space-icon {
-  width: 1.9em;
-  height: 1.9em;
+  width: 4em !important;
+  height: 5em !important;
 }
 
 .btn-icon svg {
@@ -282,17 +346,98 @@ body {
   stroke: currentColor;
 }
 
-/* numpad: mantém ícone/texto preto mesmo quando selecionado */
-#numpad>button.selected {
-  background: var(--button-selected) !important;
-  color: #000 !important;
+/* =========================
+   NUMPAD MODAL STYLES (when #keyboard[data-mode="numpad"])
+   ========================= */
+
+/* switch keyboard container into numpad grid */
+#keyboard[data-mode="numpad"] {
+  display: grid;
+  grid-template-columns: repeat(6, var(--key-w));
+  /* numeric rows are double height (adjusted) */
+  grid-auto-rows: calc(var(--key-h) * 2.2);
+  column-gap: var(--gap-horizontal);
+  row-gap: var(--gap-vertical);
+  justify-content: center;
+  align-items: start;
 }
 
-#numpad>button.selected .btn-icon {
-  color: inherit !important;
+/* numeric buttons (same width, double height) */
+#keyboard[data-mode="numpad"] .num-btn {
+  min-width: var(--key-w);
+  min-height: calc(var(--key-h) * 2.2);
+  border-radius: 8px;
+  border: none;
+  background: var(--button-bg);
+  font-weight: 800;
+  font-size: calc(1em * 1.3);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-sizing: border-box;
 }
 
-/* icon-only config */
+/* special column vertical stack (6th column) */
+#keyboard[data-mode="numpad"] .special-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-vertical);
+  align-items: center;
+  justify-content: stretch;
+  /* total height equals two numeric rows + gap */
+  height: calc((var(--key-h) * 2.2 * 2) + var(--gap-vertical));
+  min-width: var(--key-w);
+  box-sizing: border-box;
+}
+
+/* each special button is equally spaced (4 items) */
+#keyboard[data-mode="numpad"] .special-wrapper .sp-btn {
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: var(--key-w);
+  border-radius: 8px;
+  background: var(--button-bg);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  cursor: pointer;
+  border: none;
+  box-sizing: border-box;
+}
+
+#keyboard[data-mode="numpad"] .special-wrapper .sp-btn .btn-icon {
+  width: 1.4em;
+  height: 1.4em;
+}
+
+/* space full-width row at bottom (keyboard and numpad) */
+#keyboard .space-row {
+  grid-column: 1 / -1;
+  min-height: var(--key-h);
+  height: var(--key-h);
+  border-radius: 8px;
+  background: var(--button-bg);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  cursor: pointer;
+  border: none;
+  margin-top: var(--gap-vertical);
+  box-sizing: border-box;
+}
+
+/* selected states for numpad and space-row */
+#keyboard[data-mode="numpad"] .num-btn.selected,
+#keyboard[data-mode="numpad"] .special-wrapper .sp-btn.selected,
+#keyboard .space-row.selected {
+  background: var(--button-selected);
+  color: #000;
+}
+
+/* misc */
 .icon-btn {
   display: inline-flex;
   align-items: center;
