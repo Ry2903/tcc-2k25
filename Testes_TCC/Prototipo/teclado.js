@@ -598,11 +598,9 @@ async function init(){
     }
   }
 
-  criarToolbar(); // create toolbar DOM (hidden until used)
-  criarTeclado(); // build abc keyboard initially
-  // criarNumpad not strictly necessary now, will be built when mode set to numpad
-
-  // wire toggle buttons in controls (text labels are in HTML)
+  criarToolbar();
+  criarTeclado();
+  
   const kbBtn = document.getElementById('toggle-keyboard');
   const npBtn = document.getElementById('toggle-numpad');
   if(kbBtn) { kbBtn.textContent = 'ABC'; kbBtn.onclick = ()=> setActiveMode('keyboard'); }
