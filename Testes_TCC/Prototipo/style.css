@@ -241,6 +241,11 @@ body {
 }
 
 /* button base (ABC) */
+
+#keyboard {
+  column-gap: calc(var(--gap-horizontal) + 3px);
+}
+
 #keyboard>button {
   width: 100%;
   height: 100%;
@@ -344,6 +349,14 @@ body {
   display: block;
 }
 
+.space-row .space-icon {
+  width: 2.6em;
+  height: 2.2em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .btn-icon:not(.preserve) svg {
   fill: currentColor;
   stroke: currentColor;
@@ -355,9 +368,8 @@ body {
 #keyboard[data-mode="numpad"] {
   display: grid;
   grid-template-columns: repeat(6, var(--key-w));
-  /* 5 numeric columns + 1 special column; numeric rows double height */
   grid-auto-rows: calc(var(--key-h) * 2);
-  column-gap: var(--gap-horizontal);
+  column-gap: calc(var(--gap-horizontal) + 3px);
   row-gap: var(--gap-vertical);
   justify-content: center;
   align-items: start;
@@ -376,6 +388,15 @@ body {
   cursor: pointer;
   border: none;
   box-sizing: border-box;
+}
+
+#keyboard[data-mode="numpad"] .space-row .space-icon {
+  width: 3.6em;
+  height: 3.2em;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 #keyboard[data-mode="numpad"] .num-btn {
@@ -399,17 +420,15 @@ body {
   gap: var(--gap-vertical);
   align-items: center;
   justify-content: stretch;
-  /* total height equals two numeric rows + gap */
   height: calc((var(--key-h) * 2 * 2) + var(--gap-vertical));
   min-width: var(--key-w);
   box-sizing: border-box;
 }
 
-/* each special button is half-height of numeric button (approx) */
 #keyboard[data-mode="numpad"] .special-wrapper .sp-btn {
   flex: 1 1 0;
   min-width: var(--key-w);
-  min-height: calc((var(--key-h) * 2 - var(--gap-vertical)) / 2 + 1px);
+  min-height: calc((var(--key-h) * 2 - var(--gap-vertical)) / 2 );
   border-radius: 8px;
   background: var(--button-bg);
   display: inline-flex;
@@ -424,12 +443,6 @@ body {
 #keyboard[data-mode="numpad"] .special-wrapper .sp-btn .btn-icon {
   width: 1.4em;
   height: 1.4em;
-}
-
-/* space-row small adjust for numpad */
-#keyboard[data-mode="numpad"] .space-row {
-  margin-top: var(--gap-vertical);
-  height: var(--key-h);
 }
 
 /* SELECTION RULES (linha -> confirmação) */
