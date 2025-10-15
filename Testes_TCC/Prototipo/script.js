@@ -23,10 +23,15 @@ document.addEventListener('DOMContentLoaded', () => {
     if (attr === 'true' || attr === 'false') detectionEnabled = attr === 'true';
   }
 
-  let EAR_THRESHOLD = parseFloat(thrValSpan?.innerText || '0.269') || 0.269;
-  let EAR_CONSEC_FRAMES = parseInt(framesValSpan?.innerText || '2',10) || 2;
+  function roundToStep(value, step) {
+    const precision = Math.round(1 / step);
+    return Math.round((value + Number.EPSILON) * precision) / precision;
+  }
+
+  let EAR_THRESHOLD = parseFloat(thrValSpan?.innerText) || 0.279;      // 3 casas
+  let EAR_CONSEC_FRAMES = parseFloat(framesValSpan?.innerText) || 1.5; // passo 0.1
   let EAR_REOPEN_FRAMES = EAR_CONSEC_FRAMES;
-  let DEBOUNCE_AFTER_BLINK = parseInt(debounceValSpan?.innerText || '3',10) || 3;
+  let DEBOUNCE_AFTER_BLINK = parseFloat(debounceValSpan?.innerText) || 1.0; // passo 0.5
 
   let totalBlinks = 0;
   let earBelowFrames = 0;
@@ -34,57 +39,60 @@ document.addEventListener('DOMContentLoaded', () => {
   let blinkInProgress = false;
   let debounceFrames = 0;
 
-  function updateDisplays(){
-    if(thrValSpan) thrValSpan.innerText = EAR_THRESHOLD.toFixed(3);
-    if(framesValSpan) framesValSpan.innerText = EAR_CONSEC_FRAMES;
-    if(debounceValSpan) debounceValSpan.innerText = DEBOUNCE_AFTER_BLINK;
+  function updateDisplays() {
+    if (thrValSpan) thrValSpan.innerText = EAR_THRESHOLD.toFixed(3);
+    if (framesValSpan) framesValSpan.innerText = EAR_CONSEC_FRAMES.toFixed(1);   // exibe 1 casa decimal
+    if (debounceValSpan) debounceValSpan.innerText = DEBOUNCE_AFTER_BLINK.toFixed(1);
   }
   updateDisplays();
 
+  // THRESHOLD (passo 0.001 no seu código anterior; mantive 0.001)
   if (thrDec) thrDec.addEventListener('click', () => {
-    EAR_THRESHOLD = Math.max(0, +(EAR_THRESHOLD - 0.01).toFixed(3));
+    EAR_THRESHOLD = Math.max(0, roundToStep(EAR_THRESHOLD - 0.001, 0.001));
     updateDisplays();
   });
   if (thrInc) thrInc.addEventListener('click', () => {
-    EAR_THRESHOLD = Math.min(1, +(EAR_THRESHOLD + 0.01).toFixed(3));
+    EAR_THRESHOLD = Math.min(1, roundToStep(EAR_THRESHOLD + 0.001, 0.001));
     updateDisplays();
   });
 
+  // FRAMES (passo 0.1)
   if (framesDec) framesDec.addEventListener('click', () => {
-    EAR_CONSEC_FRAMES = Math.max(1, EAR_CONSEC_FRAMES - 1);
+    EAR_CONSEC_FRAMES = Math.max(0, roundToStep(EAR_CONSEC_FRAMES - 0.1, 0.1));
     EAR_REOPEN_FRAMES = EAR_CONSEC_FRAMES;
     updateDisplays();
   });
   if (framesInc) framesInc.addEventListener('click', () => {
-    EAR_CONSEC_FRAMES = EAR_CONSEC_FRAMES + 1;
+    EAR_CONSEC_FRAMES = Math.max(0, roundToStep(EAR_CONSEC_FRAMES + 0.1, 0.1));
     EAR_REOPEN_FRAMES = EAR_CONSEC_FRAMES;
     updateDisplays();
   });
 
+  // DEBOUNCE (passo 0.5)
   if (debDec) debDec.addEventListener('click', () => {
-    DEBOUNCE_AFTER_BLINK = Math.max(0, DEBOUNCE_AFTER_BLINK - 1);
+    DEBOUNCE_AFTER_BLINK = Math.max(0, roundToStep(DEBOUNCE_AFTER_BLINK - 0.5, 0.5));
     updateDisplays();
   });
   if (debInc) debInc.addEventListener('click', () => {
-    DEBOUNCE_AFTER_BLINK = DEBOUNCE_AFTER_BLINK + 1;
+    DEBOUNCE_AFTER_BLINK = roundToStep(DEBOUNCE_AFTER_BLINK + 0.5, 0.5);
     updateDisplays();
   });
 
-  async function startCameraAndModels(){
-    if(!video){ console.error('videoEl não encontrado'); return; }
+  async function startCameraAndModels() {
+    if (!video) { console.error('videoEl não encontrado'); return; }
     try {
       await Promise.all([
         faceapi.nets.tinyFaceDetector.loadFromUri('./models'),
         faceapi.nets.faceLandmark68Net.loadFromUri('./models')
       ]);
-    } catch(err){
+    } catch (err) {
       console.error('Falha ao carregar modelos face-api:', err);
       return;
     }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: {} });
       video.srcObject = stream;
-    } catch(err){
+    } catch (err) {
       console.error('Erro ao acessar câmera:', err);
       return;
     }
@@ -97,33 +105,33 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  function distance(pA,pB){ return Math.hypot(pA.x - pB.x, pA.y - pB.y); }
-  function getEAR(eye){
-    const [p1,p2,p3,p4,p5,p6] = eye;
-    const a = distance(p2,p6);
-    const b = distance(p3,p5);
-    const c = distance(p1,p4);
-    return (a+b)/(2*c);
+  function distance(pA, pB) { return Math.hypot(pA.x - pB.x, pA.y - pB.y); }
+  function getEAR(eye) {
+    const [p1, p2, p3, p4, p5, p6] = eye;
+    const a = distance(p2, p6);
+    const b = distance(p3, p5);
+    const c = distance(p1, p4);
+    return (a + b) / (2 * c);
   }
 
-  function onBlinkDetected(){
+  function onBlinkDetected() {
     totalBlinks++;
-    if(piscas) piscas.innerText = `✅ Piscou! Total: ${totalBlinks}`;
-    if(typeof window.selecionarTeclaAtual === 'function') window.selecionarTeclaAtual();
-    else if(typeof window.selecionarTeclaNumpadAtual === 'function') window.selecionarTeclaNumpadAtual();
+    if (piscas) piscas.innerText = `✅ Piscou! Total: ${totalBlinks}`;
+    if (typeof window.selecionarTeclaAtual === 'function') window.selecionarTeclaAtual();
+    else if (typeof window.selecionarTeclaNumpadAtual === 'function') window.selecionarTeclaNumpadAtual();
   }
 
-  async function onPlay(){
-    if(!video || video.paused || video.ended || !ctx){ requestAnimationFrame(onPlay); return; }
+  async function onPlay() {
+    if (!video || video.paused || video.ended || !ctx) { requestAnimationFrame(onPlay); return; }
     let detection = null;
     try {
       detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks();
-    } catch(err){
+    } catch (err) {
       console.warn('face-api detect erro:', err);
     }
-    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    if(detection && detectionEnabled){
+    if (detection && detectionEnabled) {
       const resized = faceapi.resizeResults(detection, { width: canvas.width, height: canvas.height });
       faceapi.draw.drawDetections(canvas, resized);
       faceapi.draw.drawFaceLandmarks(canvas, resized);
@@ -132,14 +140,14 @@ document.addEventListener('DOMContentLoaded', () => {
       const rightEAR = getEAR(lm.getRightEye());
       const avgEAR = (leftEAR + rightEAR) / 2;
 
-      if(debounceFrames > 0){ debounceFrames--; requestAnimationFrame(onPlay); return; }
+      if (debounceFrames > 0) { debounceFrames--; requestAnimationFrame(onPlay); return; }
 
-      if(avgEAR < EAR_THRESHOLD){
+      if (avgEAR < EAR_THRESHOLD) {
         earBelowFrames++; earAboveFrames = 0;
-        if(!blinkInProgress && earBelowFrames >= EAR_CONSEC_FRAMES) blinkInProgress = true;
+        if (!blinkInProgress && earBelowFrames >= EAR_CONSEC_FRAMES) blinkInProgress = true;
       } else {
         earAboveFrames++; earBelowFrames = 0;
-        if(blinkInProgress && earAboveFrames >= EAR_REOPEN_FRAMES){
+        if (blinkInProgress && earAboveFrames >= EAR_REOPEN_FRAMES) {
           blinkInProgress = false;
           debounceFrames = DEBOUNCE_AFTER_BLINK;
           onBlinkDetected();
@@ -147,10 +155,10 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     } else {
       earBelowFrames = 0; earAboveFrames = 0; blinkInProgress = false; debounceFrames = 0;
-      if(!detectionEnabled){
-        if(piscas) piscas.innerText = `Detecção desativada — Total de piscadas: ${totalBlinks}`;
+      if (!detectionEnabled) {
+        if (piscas) piscas.innerText = `Detecção desativada — Total de piscadas: ${totalBlinks}`;
       } else {
-        if(piscas) piscas.innerText = `Total de piscadas: ${totalBlinks}`;
+        if (piscas) piscas.innerText = `Total de piscadas: ${totalBlinks}`;
       }
     }
 
@@ -174,9 +182,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // wire control toggle-detection button (textual) - this button is in the controls area
   detBtn = document.getElementById('toggle-detection');
-  if(detBtn){
+  if (detBtn) {
     detBtn.setAttribute('data-detection-active', String(detectionEnabled));
-    if(detectionEnabled) detBtn.textContent = 'Desativar detecção';
+    if (detectionEnabled) detBtn.textContent = 'Desativar detecção';
     else detBtn.textContent = 'Ativar detecção';
     detBtn.onclick = () => {
       const cur = detBtn.getAttribute('data-detection-active') === 'true';

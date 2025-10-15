@@ -1,5 +1,7 @@
-/* teclado.js - versão revisada para preservar layout ao alternar ABC <-> NUMPAD
-   Mantém seleção por linhas/colunas, special-wrapper em 2 partes, enter/space/backspace, toolbar.
+/* teclado.js - versão atualizada: garante reinício dos ciclos ao trocar de mode
+   - sempre reinicia toolbar/controls/keyboard do primeiro item
+   - usa delays já definidos (FIRST_ROW_DELAY, CONTROLS_FIRST_ROW_DELAY)
+   - mantém comportamento de controls (row-selected persistente durante coluna)
 */
 
 const teclas = [
@@ -12,18 +14,33 @@ const teclas = [
 ];
 
 let capsAtivo = false;
-let botoesTeclado = []; // array lógico usado pelo ciclo/seleção (pode conter nodes ou { el, occ })
+let botoesTeclado = [];
 let botoesToolbar = [];
-let activeMode = 'keyboard'; // 'keyboard' | 'numpad' | 'toolbar'
+let botoesControls = []; // modelo lógico das linhas em #controls
+let activeMode = 'keyboard'; // 'keyboard' | 'numpad' | 'toolbar' | 'controls'
 
 const numColunas = 6;
-const ROW_INTERVAL = 900;
+
+const ROW_INTERVAL = 1100;
 const FIRST_ROW_DELAY = 1800;
+
+const CONTROLS_ROW_INTERVAL = 2000;
+const CONTROLS_FIRST_ROW_DELAY = 2400;
+
 const COL_ROUNDS_MAX = 3;
 
+/* ---------------- timers / estado ---------------- */
 let rowIntervalId = null;
 let colIntervalId = null;
 let initialTimeoutId = null;
+
+let toolbarRowIntervalId = null;
+let toolbarInitialTimeoutId = null;
+let toolbarIndex = 0;
+
+let controlsRowIntervalId = null;
+let controlsColIntervalId = null;
+let controlsInitialTimeoutId = null;
 
 let currentRow = 0;
 let currentCol = 0;
@@ -31,7 +48,10 @@ let currentSub = 0;
 let colRounds = 0;
 let selectingColumn = false;
 
-/* ---------------- ICON HELPERS ---------------- */
+/* debug flag */
+if (typeof window !== 'undefined' && window.__kb_debug === undefined) window.__kb_debug = false;
+
+/* ---------------- icon helpers ---------------- */
 const iconsCache = {};
 const PRESERVE_STYLES = new Set(['backspace','trash']);
 
@@ -40,7 +60,6 @@ function wrapIconHTML(svgInner, name, preserve=false){
   if(name === 'spacebar') return `<span class="${cls} space-icon" aria-hidden="true">${svgInner}</span>`;
   return `<span class="${cls}" aria-hidden="true">${svgInner}</span>`;
 }
-
 function iconSVGFallback(name){
   if(name === 'gear') return wrapIconHTML(`<svg viewBox="0 0 24 24"><path d="M12 8a4 4 0 1 0 4 4 4 4 0 0 0-4-4z"/></svg>`, name);
   if(name === 'trash') return wrapIconHTML(`<svg viewBox="0 0 24 24"><path d="M6 7h12v13a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V7z"/></svg>`, name, true);
@@ -56,7 +75,6 @@ function iconSVGFallback(name){
   if(name === '123' || name === 'abc') return wrapIconHTML(`<svg viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/></svg>`, name);
   return `<span class="btn-icon" aria-hidden="true"></span>`;
 }
-
 async function preloadIcon(name){
   if(!name) return;
   if(iconsCache[name]) return;
@@ -79,7 +97,6 @@ async function preloadIcon(name){
     iconsCache[name] = iconSVGFallback(name);
   }
 }
-
 function getIconHTML(name){
   if(!name) return `<span class="btn-icon" aria-hidden="true"></span>`;
   if(iconsCache[name]) return iconsCache[name];
@@ -89,16 +106,147 @@ function getIconHTML(name){
   return fb;
 }
 
-/* ---------------- helpers ---------------- */
+/* ---------------- util helpers ---------------- */
 function normalizeEntry(entry){
   if(!entry) return { node: null, occ: 0 };
-  if(entry.el) return { node: entry.el, occ: entry.occ || 0 };
+  if(entry.el) return { node: entry.el, occ: (typeof entry.occ === 'number') ? entry.occ : 0 };
   return { node: entry, occ: 0 };
 }
+function isElementNode(node){ return node && typeof node === 'object' && node.nodeType === 1; }
 
-/* ---------------- formatting / behavior ---------------- */
+/* safe add/remove */
+function addClassToElement(el, cls){ if(!isElementNode(el)) return; if(!el.classList.contains(cls)) el.classList.add(cls); }
+function removeClassFromElement(el, cls){ if(!isElementNode(el)) return; if(el.classList.contains(cls)) el.classList.remove(cls); }
+
+/* ---------------- apply/remove selection classes ---------------- */
+function applyClassToEntry(entry, cls, opts = { applyToWrapperIfCompound: true }){
+  const { node, occ } = normalizeEntry(entry);
+  if(!node || !isElementNode(node)) return;
+
+  if(node.classList.contains('compound-cell')){
+    if(node.classList.contains('special-wrapper')){
+      const halves = Array.from(node.querySelectorAll('.half-btn'));
+      const rowSpan = Math.max(1, parseInt(node.dataset.rowSpan || '1', 10));
+      const halvesPerRow = Math.ceil(halves.length / rowSpan);
+      if(typeof occ === 'number'){
+        const start = occ * halvesPerRow;
+        for(let i = start; i < start + halvesPerRow && i < halves.length; i++) addClassToElement(halves[i], cls);
+      } else halves.forEach(h => addClassToElement(h, cls));
+      return;
+    }
+    node.querySelectorAll('.half-btn').forEach(h => addClassToElement(h, cls));
+    if(opts.applyToWrapperIfCompound) addClassToElement(node, cls);
+    return;
+  }
+
+  addClassToElement(node, cls);
+}
+
+function removeClassFromEntry(entry, cls){
+  const { node, occ } = normalizeEntry(entry);
+  if(!node || !isElementNode(node)) return;
+
+  if(node.classList.contains('compound-cell')){
+    if(node.classList.contains('special-wrapper')){
+      const halves = Array.from(node.querySelectorAll('.half-btn'));
+      const rowSpan = Math.max(1, parseInt(node.dataset.rowSpan || '1', 10));
+      const halvesPerRow = Math.ceil(halves.length / rowSpan);
+      if(typeof occ === 'number'){
+        const start = occ * halvesPerRow;
+        for(let i = start; i < start + halvesPerRow && i < halves.length; i++) removeClassFromElement(halves[i], cls);
+      } else halves.forEach(h => removeClassFromElement(h, cls));
+      removeClassFromElement(node, cls);
+      return;
+    }
+    node.querySelectorAll('.half-btn').forEach(h => removeClassFromElement(h, cls));
+    removeClassFromElement(node, cls);
+    return;
+  }
+
+  removeClassFromElement(node, cls);
+}
+
+/* ---------------- CONTROLS model and helpers ---------------- */
+function buildControlsModel(){
+  botoesControls = [];
+  const groups = Array.from(document.querySelectorAll('#controls .config-group'));
+  groups.forEach(group => {
+    const btnContainer = group.querySelector('.config-buttons');
+    if(!btnContainer) return;
+    const buttons = Array.from(btnContainer.querySelectorAll('button'));
+    let type = 'single';
+    if(buttons.length >= 2) type = 'pair';
+    botoesControls.push({ el: btnContainer, buttons, groupEl: group, type });
+  });
+
+  ensureControlsGearButton();
+
+  // try to include gear if it was just created
+  const gearBtn = document.getElementById('settings-gear-btn');
+  if(gearBtn){
+    const wrap = gearBtn.parentElement;
+    const groupEl = wrap ? wrap.parentElement : null;
+    // avoid duplicates
+    if(!botoesControls.some(c => c.buttons.some(b => b && b.id === 'settings-gear-btn'))){
+      botoesControls.push({ el: wrap, buttons: [gearBtn], groupEl: groupEl, type: 'single' });
+    }
+  }
+
+  if(window.__kb_debug) console.log('buildControlsModel ->', botoesControls);
+}
+
+function ensureControlsGearButton(){
+  if(document.getElementById('settings-gear-btn')) return;
+  const grid = document.querySelector('#controls .config-grid');
+  if(!grid) return;
+  const group = document.createElement('div');
+  group.className = 'config-group';
+  const label = document.createElement('label');
+  label.innerHTML = '&nbsp;';
+  group.appendChild(label);
+  const btnWrap = document.createElement('div');
+  btnWrap.className = 'config-buttons';
+  const gearBtn = document.createElement('button');
+  gearBtn.id = 'settings-gear-btn';
+  gearBtn.className = 'icon-btn';
+  gearBtn.title = 'Voltar para toolbar';
+  gearBtn.innerHTML = getIconHTML('gear');
+  gearBtn.addEventListener('click', ()=> { setActivePanel('toolbar'); resetSelection(); });
+  btnWrap.appendChild(gearBtn);
+  group.appendChild(btnWrap);
+  grid.appendChild(group);
+  if(window.__kb_debug) console.log('ensureControlsGearButton -> created');
+}
+
+function clearControlsSelections(){
+  botoesControls.forEach(entry => {
+    try {
+      if(entry.el) entry.el.classList.remove('row-selected','selected');
+      if(Array.isArray(entry.buttons)) entry.buttons.forEach(b => { if(b && b.classList) b.classList.remove('row-selected','selected'); });
+      if(entry.groupEl) entry.groupEl.classList.remove('row-selected','selected');
+    } catch(e){}
+  });
+}
+
+function getCurrentlySelectedControlButton(){
+  for(let i=0;i<botoesControls.length;i++){
+    const entry = botoesControls[i];
+    if(!entry) continue;
+    if(entry.buttons && entry.buttons.length){
+      for(let j=0;j<entry.buttons.length;j++){
+        const b = entry.buttons[j];
+        if(b && b.classList && b.classList.contains('selected')) return b;
+      }
+    }
+    if(entry.el && entry.el.classList.contains('row-selected') && entry.buttons && entry.buttons.length === 1){
+      return entry.buttons[0];
+    }
+  }
+  return undefined;
+}
+
+/* ---------------- formatting / processing ---------------- */
 const especiais = ['caps','?','enter'];
-
 function formatarLabel(item){
   if(typeof item === 'string'){
     if(especiais.includes(item)) return item;
@@ -125,7 +273,7 @@ function processarTecla(item){
   out.value += formatarLabel(item);
 }
 
-/* ---------------- DOM helpers ---------------- */
+/* ---------------- DOM helpers (keyboard container) ---------------- */
 function getKeyboardContainer(){
   let kb = document.getElementById('keyboard');
   if(kb) return kb;
@@ -138,14 +286,13 @@ function getKeyboardContainer(){
   return kb;
 }
 
-/* ---------------- CRIAR TECLADO ABC ---------------- */
+/* ---------------- criar teclado ---------------- */
 function criarTeclado(){
   const container = getKeyboardContainer();
   if(!container) return;
   container.innerHTML = '';
   botoesTeclado = [];
 
-  // garantir classe que aplica layout ABC
   container.className = 'grid-6cols';
   container.setAttribute('data-mode','keyboard');
 
@@ -198,7 +345,6 @@ function criarTeclado(){
     botoesTeclado.push(btn);
   });
 
-  // space-row bottom (único)
   const spaceRow = document.createElement('button');
   spaceRow.className = 'space-row';
   spaceRow._item = 'space';
@@ -207,30 +353,29 @@ function criarTeclado(){
   container.appendChild(spaceRow);
   botoesTeclado.push(spaceRow);
 
-  // limpeza visual
+  // cleanup
   botoesTeclado.forEach(entry => {
     const { node } = normalizeEntry(entry);
     if(node && node.classList) node.classList.remove('row-selected','selected');
+    if(node && node.querySelectorAll) node.querySelectorAll('.half-btn').forEach(h => h.classList.remove('row-selected','selected'));
   });
 
   currentRow = 0;
   selectingColumn = false;
 }
 
-/* ---------------- CRIAR NUMPAD ---------------- */
+/* ---------------- criar numpad ---------------- */
 function criarNumpad(){
   const container = getKeyboardContainer();
   if(!container) return;
   container.innerHTML = '';
   botoesTeclado = [];
 
-  // manter classe 'grid-6cols' (não remover) para que ao voltar pro keyboard o layout volte intacto
   container.className = 'grid-6cols';
   container.setAttribute('data-mode','numpad');
 
   const numbers = ['1','2','3','4','5','6','7','8','9','0'];
 
-  // FIRST ROW: 1..5 (col 1..5)
   for(let i=0;i<5;i++){
     const b = document.createElement('button');
     b.className = 'num-btn';
@@ -241,15 +386,12 @@ function criarNumpad(){
     botoesTeclado.push(b);
   }
 
-  // special-wrapper (col 6) — único nó DOM, mas referenciado duas vezes logicamente
   const specialWrapper = document.createElement('div');
   specialWrapper.className = 'compound-cell special-wrapper';
-  // ocupa coluna 6 e duas linhas (visual)
   specialWrapper.style.gridColumn = String(numColunas);
   specialWrapper.style.gridRow = '1 / span 2';
   specialWrapper.dataset.rowSpan = '2';
 
-  // ordem pedida: gear (top), backspace, enter, trash (bottom)
   const specialDefs = [
     { type:'action', action:'openTabs', icon:'gear' },
     { type:'action', action:'backspace', icon:'backspace' },
@@ -271,11 +413,8 @@ function criarNumpad(){
   });
 
   container.appendChild(specialWrapper);
-
-  // na lista lógica, adicionamos a referência superior (occ:0)
   botoesTeclado.push({ el: specialWrapper, occ: 0 });
 
-  // SECOND ROW: 6..0 (col 1..5)
   for(let i=5;i<10;i++){
     const b = document.createElement('button');
     b.className = 'num-btn';
@@ -286,10 +425,8 @@ function criarNumpad(){
     botoesTeclado.push(b);
   }
 
-  // adiciona referência lógica da specialWrapper para a 2ª linha (occ:1)
   botoesTeclado.push({ el: specialWrapper, occ: 1 });
 
-  // SPACE ROW (3ª linha, full width)
   const spaceRow = document.createElement('button');
   spaceRow.className = 'space-row';
   spaceRow._item = 'space';
@@ -298,13 +435,11 @@ function criarNumpad(){
   container.appendChild(spaceRow);
   botoesTeclado.push(spaceRow);
 
-  // limpeza visual
+  // cleanup
   botoesTeclado.forEach(entry => {
     const { node } = normalizeEntry(entry);
-    if(node && node.classList){
-      node.classList.remove('selected','row-selected');
-      node.querySelectorAll && node.querySelectorAll('.half-btn').forEach(h => h.classList.remove('selected','row-selected'));
-    }
+    if(node && node.classList) node.classList.remove('row-selected','selected');
+    if(node && node.querySelectorAll) node.querySelectorAll('.half-btn').forEach(h => h.classList.remove('row-selected','selected'));
   });
 
   currentRow = 0;
@@ -343,9 +478,10 @@ function criarToolbar(){
     btn.id = b.id;
     btn.innerHTML = getIconHTML(b.icon);
     btn.dataset.action = b.action;
-    btn.addEventListener('click', ()=> {
+    btn.addEventListener('click', () => {
       if(b.action === 'numpad') setActivePanel('numpad');
       else if(b.action === 'alpha') setActivePanel('keyboard');
+      else if(b.action === 'tools') setActivePanel('controls');
       else document.dispatchEvent(new CustomEvent('toolbar:action', { detail: { action: b.action } }));
       resetSelection();
     });
@@ -364,37 +500,44 @@ function criarToolbar(){
   botoesToolbar = Array.from(toolbar.querySelectorAll('.tool-btn'));
 }
 
-/* ---------------- timers / highlights / cycles ---------------- */
+/* ---------------- stop timers ---------------- */
 function stopAllTimers(){
   if(rowIntervalId){ clearInterval(rowIntervalId); rowIntervalId = null; }
   if(colIntervalId){ clearInterval(colIntervalId); colIntervalId = null; }
   if(initialTimeoutId){ clearTimeout(initialTimeoutId); initialTimeoutId = null; }
+
+  if(toolbarRowIntervalId){ clearInterval(toolbarRowIntervalId); toolbarRowIntervalId = null; }
+  if(toolbarInitialTimeoutId){ clearTimeout(toolbarInitialTimeoutId); toolbarInitialTimeoutId = null; }
+
+  if(controlsRowIntervalId){ clearInterval(controlsRowIntervalId); controlsRowIntervalId = null; }
+  if(controlsColIntervalId){ clearInterval(controlsColIntervalId); controlsColIntervalId = null; }
+  if(controlsInitialTimeoutId){ clearTimeout(controlsInitialTimeoutId); controlsInitialTimeoutId = null; }
+
   selectingColumn = false;
   currentSub = 0;
   colRounds = 0;
 }
 
+/* ---------------- keyboard row highlight ---------------- */
 function highlightRowImmediate(){
-  // limpa visual anterior
+  // clears previous row visuals
   botoesTeclado.forEach(entry => {
     const { node } = normalizeEntry(entry);
-    if(!node) return;
-    node.classList.remove('row-selected','selected');
-    if(node.classList && node.classList.contains('compound-cell')) node.querySelectorAll('.half-btn').forEach(h => h.classList.remove('row-selected','selected'));
+    if(node && node.classList) node.classList.remove('row-selected','selected');
+    if(node && node.querySelectorAll) node.querySelectorAll('.half-btn').forEach(h => h.classList.remove('row-selected','selected'));
   });
 
-  const totalRows = Math.ceil(botoesTeclado.length / numColunas);
+  const totalRows = Math.max(1, Math.ceil(botoesTeclado.length / numColunas));
   const start = currentRow * numColunas;
 
   for(let i = start; i < start + numColunas && i < botoesTeclado.length; i++){
     const entry = botoesTeclado[i];
     const { node, occ } = normalizeEntry(entry);
     if(!node) continue;
-
     if(node.classList && node.classList.contains('compound-cell')){
       if(node.classList.contains('special-wrapper')){
-        const rowSpan = parseInt(node.dataset.rowSpan || '1', 10);
         const halves = Array.from(node.querySelectorAll('.half-btn'));
+        const rowSpan = parseInt(node.dataset.rowSpan || '1', 10);
         const halvesPerRow = Math.ceil(halves.length / rowSpan);
         const whichOcc = occ || 0;
         const startHalf = whichOcc * halvesPerRow;
@@ -413,17 +556,19 @@ function highlightRowImmediate(){
   currentRow = (currentRow + 1) % totalRows;
 }
 
+/* ---------------- keyboard row cycle ---------------- */
 function startRowCycle(withFirstDelay = true){
   if(activeMode !== 'keyboard' && activeMode !== 'numpad') return;
   stopAllTimers();
+
+  // ensure cycle always begins at first row
+  currentRow = 0;
+
   function doRow(){ highlightRowImmediate(); }
+
   if(withFirstDelay){
     doRow();
-    initialTimeoutId = setTimeout(()=>{
-      doRow();
-      initialTimeoutId = null;
-      rowIntervalId = setInterval(doRow, ROW_INTERVAL);
-    }, FIRST_ROW_DELAY);
+    initialTimeoutId = setTimeout(()=>{ doRow(); initialTimeoutId = null; rowIntervalId = setInterval(doRow, ROW_INTERVAL); }, FIRST_ROW_DELAY);
   } else {
     rowIntervalId = setInterval(doRow, ROW_INTERVAL);
     doRow();
@@ -439,18 +584,25 @@ function startColumnCycle(){
   currentCol = 0;
   currentSub = 0;
 
-  const totalRows = Math.ceil(botoesTeclado.length / numColunas);
+  const totalRows = Math.max(1, Math.ceil(botoesTeclado.length / numColunas));
   const lastRow = (currentRow - 1 + totalRows) % totalRows;
   const start = lastRow * numColunas;
 
+  // IMPORTANT: don't remove existing row-selected here.
+  // We want the row highlight to remain visible during the column selection stage.
+  // Only remove previous 'selected' badges.
   botoesTeclado.forEach(entry => {
     const { node } = normalizeEntry(entry);
     if(!node) return;
-    node.classList.remove('row-selected','selected');
-    if(node.classList && node.classList.contains('compound-cell')) node.querySelectorAll('.half-btn').forEach(h => h.classList.remove('selected','row-selected'));
+    // remove only column-level selection markers; keep row-selected intact
+    if(node.classList && node.classList.contains('compound-cell')) {
+      node.querySelectorAll('.half-btn').forEach(h => h.classList.remove('selected'));
+    }
+    node.classList && node.classList.remove('selected');
   });
 
-  colIntervalId = setInterval(()=>{
+  function columnTick(){
+    // remove only 'selected' (do NOT touch 'row-selected')
     botoesTeclado.forEach(entry => {
       const { node } = normalizeEntry(entry);
       if(!node) return;
@@ -459,6 +611,7 @@ function startColumnCycle(){
     });
 
     const idx = start + currentCol;
+
     if(idx < botoesTeclado.length){
       const entry = botoesTeclado[idx];
       const { node, occ } = normalizeEntry(entry);
@@ -468,14 +621,14 @@ function startColumnCycle(){
       } else if(node.classList && node.classList.contains('compound-cell')){
         if(node.classList.contains('special-wrapper')){
           const halves = Array.from(node.querySelectorAll('.half-btn'));
-          const rowSpan = parseInt(node.dataset.rowSpan || '1', 10);
+          const rowSpan = Math.max(1, parseInt(node.dataset.rowSpan || '1', 10));
           const halvesPerRow = Math.ceil(halves.length / rowSpan);
           const whichOcc = occ || 0;
           const blockStart = whichOcc * halvesPerRow;
           const block = halves.slice(blockStart, blockStart + halvesPerRow);
           if(block.length){
             const target = block[currentSub % block.length];
-            target.classList.add('selected');
+            addClassToElement(target, 'selected');
             currentSub++;
             if(currentSub >= block.length){
               currentSub = 0;
@@ -483,7 +636,7 @@ function startColumnCycle(){
               if(currentCol === 0) colRounds++;
             }
           } else {
-            node.classList.add('selected');
+            addClassToElement(node, 'selected');
             currentCol = (currentCol + 1) % numColunas;
             if(currentCol === 0) colRounds++;
           }
@@ -491,7 +644,7 @@ function startColumnCycle(){
           const halves = Array.from(node.querySelectorAll('.half-btn'));
           if(halves.length){
             const target = halves[currentSub % halves.length];
-            target.classList.add('selected');
+            addClassToElement(target, 'selected');
             currentSub++;
             if(currentSub >= halves.length){
               currentSub = 0;
@@ -499,13 +652,13 @@ function startColumnCycle(){
               if(currentCol === 0) colRounds++;
             }
           } else {
-            node.classList.add('selected');
+            addClassToElement(node, 'selected');
             currentCol = (currentCol + 1) % numColunas;
             if(currentCol === 0) colRounds++;
           }
         }
       } else {
-        node.classList.add('selected');
+        addClassToElement(node, 'selected');
         currentCol = (currentCol + 1) % numColunas;
         if(currentCol === 0) colRounds++;
       }
@@ -519,23 +672,208 @@ function startColumnCycle(){
       colIntervalId = null;
       selectingColumn = false;
 
+      // remove only 'selected' badges here, keep the row-selected so the user still sees the group highlight.
       botoesTeclado.forEach(entry => {
         const { node } = normalizeEntry(entry);
         if(!node) return;
-        if(node.classList && node.classList.contains('compound-cell')){
-          node.querySelectorAll('.half-btn').forEach(h => h.classList.remove('selected','row-selected'));
-          node.classList.remove('row-selected','selected');
-        } else {
-          node.classList.remove('selected','row-selected');
-        }
+        if(node.classList && node.classList.contains('compound-cell')) node.querySelectorAll('.half-btn').forEach(h => h.classList.remove('selected'));
+        node.classList && node.classList.remove('selected');
       });
 
+      // restart row cycle (this will advance the row highlight normally)
       startRowCycle(false);
     }
-  }, ROW_INTERVAL);
+  }
+
+  // first tick + interval
+  columnTick();
+  colIntervalId = setInterval(columnTick, ROW_INTERVAL);
 }
 
-/* ---------------- selection helpers ---------------- */
+/* ---------------- toolbar cycle ---------------- */
+function stopToolbarTimers(){
+  if(toolbarRowIntervalId){ clearInterval(toolbarRowIntervalId); toolbarRowIntervalId = null; }
+  if(toolbarInitialTimeoutId){ clearTimeout(toolbarInitialTimeoutId); toolbarInitialTimeoutId = null; }
+  botoesToolbar.forEach(b => b.classList.remove('selected','row-selected'));
+}
+function startToolbarCycle(withFirstDelay = true){
+  stopToolbarTimers();
+
+  // always start from the first button
+  toolbarIndex = 0;
+
+  if(!botoesToolbar || !botoesToolbar.length){
+    const anyToolbar = document.querySelector('.toolbar');
+    if(anyToolbar) botoesToolbar = Array.from(anyToolbar.querySelectorAll('.tool-btn'));
+  }
+  if(!botoesToolbar || !botoesToolbar.length) return;
+
+  function doRow(){
+    botoesToolbar.forEach(b => b.classList.remove('row-selected'));
+    // safety: clamp index
+    const idx = toolbarIndex % botoesToolbar.length;
+    botoesToolbar[idx].classList.add('row-selected');
+    toolbarIndex = (toolbarIndex + 1) % botoesToolbar.length;
+  }
+
+  if(withFirstDelay){
+    doRow();
+    toolbarInitialTimeoutId = setTimeout(()=>{ doRow(); toolbarInitialTimeoutId = null; toolbarRowIntervalId = setInterval(doRow, ROW_INTERVAL); }, FIRST_ROW_DELAY);
+  } else {
+    toolbarRowIntervalId = setInterval(doRow, ROW_INTERVAL);
+    doRow();
+  }
+}
+
+/* ---------------- CONTROLS cycle (linhas + colunas) ---------------- */
+let controlsRowIndex = 0;
+let controlsColIndex = 0;
+
+function highlightControlsRowImmediate(){
+  clearControlsSelections();
+  if(!botoesControls || !botoesControls.length) return;
+  const totalRows = botoesControls.length;
+  const idx = controlsRowIndex % totalRows;
+  const entry = botoesControls[idx];
+  if(!entry) return;
+  if(entry.el && entry.el.classList) entry.el.classList.add('row-selected');
+  if(entry.groupEl && entry.groupEl.classList) entry.groupEl.classList.add('row-selected');
+  controlsRowIndex = (controlsRowIndex + 1) % totalRows;
+}
+
+function startControlsRowCycle(withFirstDelay = true){
+  if(activeMode !== 'controls') return;
+  stopAllTimers();
+  buildControlsModel();
+
+  // always start controls rows from beginning
+  controlsRowIndex = 0;
+
+  function doRow(){ highlightControlsRowImmediate(); }
+  if(withFirstDelay){
+    doRow();
+    controlsInitialTimeoutId = setTimeout(()=>{ doRow(); controlsInitialTimeoutId = null; controlsRowIntervalId = setInterval(doRow, CONTROLS_ROW_INTERVAL); }, CONTROLS_FIRST_ROW_DELAY);
+  } else {
+    controlsRowIntervalId = setInterval(()=>{ highlightControlsRowImmediate(); }, CONTROLS_ROW_INTERVAL);
+    doRow();
+  }
+}
+
+function startControlsColumnCycle(){
+  if(controlsRowIntervalId){ clearInterval(controlsRowIntervalId); controlsRowIntervalId = null; }
+  if(controlsInitialTimeoutId){ clearTimeout(controlsInitialTimeoutId); controlsInitialTimeoutId = null; }
+
+  selectingColumn = true;
+  controlsColIndex = 0;
+  colRounds = 0;
+
+  const total = Math.max(1, botoesControls.length);
+  const lastRow = (controlsRowIndex - 1 + total) % total;
+  const entry = botoesControls[lastRow];
+  if(!entry) {
+    selectingColumn = false;
+    startControlsRowCycle(false);
+    return;
+  }
+
+  // prepare: clear only selected flags, then ensure the current entry keeps row-selected
+  clearControlsSelections();
+  if(entry.el && entry.el.classList) entry.el.classList.add('row-selected');
+  if(entry.groupEl && entry.groupEl.classList) entry.groupEl.classList.add('row-selected');
+
+  function columnTick(){
+    // remove only selected badges from all buttons (KEEP row-selected on the current entry)
+    botoesControls.forEach(e => {
+      if(e.buttons && e.buttons.length) e.buttons.forEach(b => b.classList.remove('selected'));
+    });
+
+    const buttons = entry.buttons || [];
+    if(buttons.length === 0){
+      if(entry.el) entry.el.classList.add('selected');
+      colRounds++;
+    } else {
+      const idx = controlsColIndex % buttons.length;
+      const target = buttons[idx];
+      if(target) target.classList.add('selected');
+      controlsColIndex = (controlsColIndex + 1) % buttons.length;
+      if(controlsColIndex === 0) colRounds++;
+    }
+
+    if(colRounds >= COL_ROUNDS_MAX){
+      if(controlsColIntervalId){ clearInterval(controlsColIntervalId); controlsColIntervalId = null; }
+      selectingColumn = false;
+      botoesControls.forEach(e => {
+        if(e.buttons && e.buttons.length) e.buttons.forEach(b => b.classList.remove('selected'));
+      });
+      startControlsRowCycle(false);
+    }
+  }
+
+  columnTick();
+  controlsColIntervalId = setInterval(columnTick, CONTROLS_ROW_INTERVAL);
+}
+
+/* ---------------- confirmação / seleção ---------------- */
+function selecionarTeclaAtual(){
+  if(activeMode === 'toolbar'){
+    const sel = botoesToolbar.find(b => b.classList.contains('row-selected') || b.classList.contains('selected'));
+    if(sel){
+      const action = sel.dataset.action;
+      if(action === 'numpad') setActivePanel('numpad');
+      else if(action === 'alpha') setActivePanel('keyboard');
+      else if(action === 'tools') setActivePanel('controls');
+      else document.dispatchEvent(new CustomEvent('toolbar:action:exec', { detail: { action } }));
+      resetSelection();
+    } else {
+      startToolbarCycle();
+    }
+    return;
+  }
+
+  if(activeMode === 'controls'){
+    if(!selectingColumn){
+      startControlsColumnCycle();
+      return;
+    }
+
+    const selBtn = getCurrentlySelectedControlButton();
+    if(selBtn){
+      try { selBtn.click(); } catch(e){ /* silencioso */ }
+    }
+    resetSelection();
+    return;
+  }
+
+  if(!selectingColumn){
+    const foundSpace = botoesTeclado.find(entry => {
+      const { node } = normalizeEntry(entry);
+      return node && node.classList && node.classList.contains('row-selected') && node.classList.contains('space-row');
+    });
+    if(foundSpace){
+      processarTecla('space');
+      resetSelection();
+      return;
+    }
+    startColumnCycle();
+    return;
+  }
+
+  if(activeMode === 'numpad'){
+    const sel = getCurrentlySelectedItemKeyboard();
+    if(sel !== undefined){
+      if(typeof sel === 'object' && sel.type === 'action') processarTecla(sel);
+      else if(typeof sel === 'object' && sel.type === 'special' && sel.char === 'enter') processarTecla('enter');
+      else processarTecla(sel);
+    }
+  } else {
+    const sel = getCurrentlySelectedItemKeyboard();
+    if(sel !== undefined) processarTecla(sel);
+  }
+
+  resetSelection();
+}
+
+/* helper used by keyboard confirm logic */
 function getCurrentlySelectedItemKeyboard(){
   for(let i=0;i<botoesTeclado.length;i++){
     const entry = botoesTeclado[i];
@@ -574,88 +912,7 @@ function getCurrentlySelectedItemKeyboard(){
   return undefined;
 }
 
-/* ---------------- toolbar cycle ---------------- */
-let toolbarRowIntervalId = null;
-let toolbarIndex = 0;
-
-function stopToolbarTimers(){
-  if(toolbarRowIntervalId){ clearInterval(toolbarRowIntervalId); toolbarRowIntervalId = null; }
-  toolbarIndex = 0;
-  botoesToolbar.forEach(b => b.classList.remove('selected','row-selected'));
-}
-
-function highlightToolbarImmediate(){
-  if(!botoesToolbar || !botoesToolbar.length) return;
-  botoesToolbar.forEach(b => b.classList.remove('row-selected'));
-  botoesToolbar[toolbarIndex].classList.add('row-selected');
-  toolbarIndex = (toolbarIndex + 1) % botoesToolbar.length;
-}
-
-function startToolbarCycle(withFirstDelay = true){
-  stopToolbarTimers();
-  if(!botoesToolbar || !botoesToolbar.length){
-    const anyToolbar = document.querySelector('.toolbar');
-    if(anyToolbar) botoesToolbar = Array.from(anyToolbar.querySelectorAll('.tool-btn'));
-  }
-  if(!botoesToolbar || !botoesToolbar.length) return;
-  function doRow(){ highlightToolbarImmediate(); }
-  if(withFirstDelay){
-    doRow();
-    toolbarRowIntervalId = setInterval(doRow, ROW_INTERVAL);
-  } else {
-    toolbarRowIntervalId = setInterval(doRow, ROW_INTERVAL);
-    doRow();
-  }
-}
-
-/* ---------------- confirm selection ---------------- */
-function selecionarTeclaAtual(){
-  if(activeMode === 'toolbar'){
-    const sel = botoesToolbar.find(b => b.classList.contains('row-selected') || b.classList.contains('selected'));
-    if(sel){
-      const action = sel.dataset.action;
-      if(action === 'numpad') setActivePanel('numpad');
-      else if(action === 'alpha') setActivePanel('keyboard');
-      else document.dispatchEvent(new CustomEvent('toolbar:action:exec', { detail: { action } }));
-    } else {
-      startToolbarCycle();
-    }
-    resetSelection();
-    return;
-  }
-
-  // Se a linha atual contém a space-row, dispara space imediatamente (linha-botão)
-  if(!selectingColumn){
-    const foundSpace = botoesTeclado.find(entry => {
-      const { node } = normalizeEntry(entry);
-      return node && node.classList && node.classList.contains('row-selected') && node.classList.contains('space-row');
-    });
-    if(foundSpace){
-      processarTecla('space');
-      resetSelection();
-      return;
-    }
-    // Caso contrário, inicia o ciclo de colunas (comportamento antigo)
-    startColumnCycle();
-    return;
-  }
-
-  // já estamos no ciclo de colunas -> confirmar item selecionado
-  if(activeMode === 'numpad'){
-    const sel = getCurrentlySelectedItemKeyboard();
-    if(sel !== undefined){
-      if(typeof sel === 'object' && sel.type === 'action') processarTecla(sel);
-      else if(typeof sel === 'object' && sel.type === 'special' && sel.char === 'enter') processarTecla('enter');
-      else processarTecla(sel);
-    }
-  } else {
-    const sel = getCurrentlySelectedItemKeyboard();
-    if(sel !== undefined) processarTecla(sel);
-  }
-
-  resetSelection();
-}
-
+/* ---------------- compat: numpad confirm ---------------- */
 function selecionarTeclaNumpadAtual(){
   if(activeMode !== 'numpad') return;
   if(!selectingColumn) startColumnCycle();
@@ -670,13 +927,13 @@ function resetSelection(){
   botoesTeclado.forEach(entry => {
     const { node } = normalizeEntry(entry);
     if(!node) return;
-    if(node.classList && node.classList.contains('compound-cell')){
-      node.classList.remove('row-selected','selected');
-      node.querySelectorAll('.half-btn').forEach(h => h.classList.remove('selected','row-selected'));
-    } else {
-      node.classList.remove('row-selected','selected');
-    }
+    if(node.classList && node.classList.contains('compound-cell')) node.querySelectorAll('.half-btn').forEach(h => h.classList.remove('selected','row-selected'));
+    node.classList && node.classList.remove('selected','row-selected');
   });
+
+  if(botoesToolbar && botoesToolbar.length) botoesToolbar.forEach(b => b.classList && b.classList.remove('selected','row-selected'));
+
+  if(botoesControls && botoesControls.length) clearControlsSelections();
 
   currentRow = 0;
   currentCol = 0;
@@ -686,10 +943,19 @@ function resetSelection(){
 
   if(activeMode === 'keyboard' || activeMode === 'numpad') startRowCycle(true);
   else if(activeMode === 'toolbar') startToolbarCycle(true);
+  else if(activeMode === 'controls') startControlsRowCycle(true);
 }
 
 function setActiveMode(mode){
-  if(mode !== 'keyboard' && mode !== 'numpad' && mode !== 'toolbar') return;
+  if(mode !== 'keyboard' && mode !== 'numpad' && mode !== 'toolbar' && mode !== 'controls') return;
+
+  // immediately stop existing timers and reset indices so next cycle starts at first item
+  stopAllTimers();
+  stopToolbarTimers();
+  toolbarIndex = 0;
+  controlsRowIndex = 0;
+  currentRow = 0;
+
   activeMode = mode;
 
   const kbBtn = document.getElementById('toggle-keyboard');
@@ -699,11 +965,13 @@ function setActiveMode(mode){
 
   if(mode === 'keyboard') criarTeclado();
   else if(mode === 'numpad') criarNumpad();
-  else if(mode === 'toolbar'){
-    criarTeclado();
-    criarToolbar();
+  else if(mode === 'toolbar'){ criarTeclado(); criarToolbar(); }
+  else if(mode === 'controls'){
+    criarTeclado(); // manter layout, mas foco ficará nos controls
+    buildControlsModel();
   }
 
+  // garante reinício do ciclo (com delays) de acordo com o mode
   resetSelection();
 }
 
@@ -711,6 +979,7 @@ function setActivePanel(panelName){
   if(panelName === 'keyboard') setActiveMode('keyboard');
   else if(panelName === 'numpad') setActiveMode('numpad');
   else if(panelName === 'toolbar') setActiveMode('toolbar');
+  else if(panelName === 'controls') setActiveMode('controls');
 }
 
 /* ---------------- init ---------------- */
@@ -732,6 +1001,9 @@ async function init(){
   criarToolbar();
   criarTeclado();
 
+  ensureControlsGearButton();
+  buildControlsModel();
+
   const kbBtn = document.getElementById('toggle-keyboard');
   const npBtn = document.getElementById('toggle-numpad');
   if(kbBtn){ kbBtn.textContent = 'ABC'; kbBtn.onclick = ()=> setActiveMode('keyboard'); }
@@ -740,7 +1012,7 @@ async function init(){
   setActiveMode(activeMode);
 }
 
-/* ---------------- expose API ---------------- */
+/* ---------------- API pública ---------------- */
 window.selecionarTeclaAtual = selecionarTeclaAtual;
 window.selecionarTeclaNumpadAtual = selecionarTeclaNumpadAtual;
 window.resetSelection = resetSelection;

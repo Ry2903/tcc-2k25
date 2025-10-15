@@ -19,21 +19,11 @@
   /* toolbar / numpad specific */
   --toolbar-bg: #49647C;
   --toolbar-btn-bg: rgba(151, 164, 175, 0.5);
-  --numpad-scale: 1.0;
 }
 
-/* Reset / base */
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
-html,
-body {
-  height: 100%;
-}
-
+/* ---------------- Reset / base ---------------- */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
 body {
   font-family: "Segoe UI", Roboto, Arial, sans-serif;
   background: var(--bg-color);
@@ -42,7 +32,7 @@ body {
   text-align: center;
 }
 
-/* Layout principal */
+/* ---------------- Layout principal ---------------- */
 #app-grid {
   display: grid;
   grid-template-areas: "video controls" "keyboard .";
@@ -62,44 +52,21 @@ body {
   border-radius: var(--border-radius);
   overflow: hidden;
 }
+#videoEl, #overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
 
-#videoEl,
-#overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-}
-
-/* controls */
+/* controls (painel direito) */
 #controls {
   grid-area: controls;
   background: var(--panel-color);
   padding: 12px;
   border-radius: var(--border-radius);
-  box-shadow: 0 0 5px rgba(0, 0, 0, .3);
+  box-shadow: 0 0 5px rgba(0,0,0,.3);
   width: 360px;
 }
+#controls h2 { margin-bottom: 12px; font-size: 1.15em; text-align: left; }
 
-#controls h2 {
-  margin-bottom: 12px;
-  font-size: 1.15em;
-  text-align: left;
-}
-
-.config-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 10px;
-}
-
-.config-group {
-  display: flex;
-  flex-direction: column;
-  text-align: left;
-}
-
+.config-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.config-group { display: flex; flex-direction: column; text-align: left; }
 .config-buttons {
   display: flex;
   align-items: center;
@@ -108,7 +75,6 @@ body {
   padding: 6px 10px;
   border-radius: 6px;
 }
-
 .config-buttons button {
   background: var(--button-bg);
   color: var(--button-text);
@@ -118,12 +84,9 @@ body {
   cursor: pointer;
   font-size: .9em;
 }
+.config-buttons button:hover { background: var(--highlight); }
 
-.config-buttons button:hover {
-  background: var(--highlight);
-}
-
-/* keyboard panel */
+/* ---------------- keyboard panel ---------------- */
 #keyboard-panel {
   grid-area: keyboard;
   background: var(--panel-color);
@@ -132,7 +95,6 @@ body {
   border: 2px solid #0a2340;
   width: calc((var(--key-w) * 6) + (var(--gap-horizontal) * 5) + 40px);
 }
-
 #output {
   width: 100%;
   padding: 8px;
@@ -144,7 +106,7 @@ body {
   border-radius: 6px;
 }
 
-/* Toolbar */
+/* ---------------- Toolbar ---------------- */
 .toolbar {
   background: var(--toolbar-bg);
   border-radius: var(--border-radius);
@@ -157,7 +119,6 @@ body {
   min-height: 40px;
   box-sizing: border-box;
 }
-
 .toolbar .tool-group {
   display: flex;
   align-items: center;
@@ -165,7 +126,6 @@ body {
   width: 100%;
   gap: 8px;
 }
-
 .toolbar .tool-btn {
   width: 2.6em;
   height: 2.6em;
@@ -180,7 +140,6 @@ body {
   padding: 6px;
   box-sizing: border-box;
 }
-
 .toolbar .tool-btn .btn-icon {
   width: 100%;
   height: 100%;
@@ -189,48 +148,25 @@ body {
   justify-content: center;
   color: #fff;
 }
-
-.toolbar .tool-btn:hover {
-  transform: translateY(-3px);
-}
-
-/* toolbar selection highlight */
+.toolbar .tool-btn:hover { transform: translateY(-3px); }
 .toolbar .tool-btn.row-selected,
-.toolbar .tool-btn.selected {
-  background: var(--select-linha);
-  color: #000;
-}
+.toolbar .tool-btn.selected { background: var(--select-linha); color: #000; }
 
-#tool-123,
-#tool-abc {
+/* ajustes específicos para os botões 123/abc (ids definidos no JS) */
+#tool-123, #tool-abc {
   width: 2.8em;
   height: 2.8em;
   min-width: 2.8em;
   min-height: 2.8em;
-  padding: 0.12em;
+  padding: .12em;
   box-sizing: border-box;
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
+#tool-123 .btn-icon svg, #tool-abc .btn-icon svg { width: 92%; height: 92%; display: block; }
 
-#tool-123 .btn-icon,
-#tool-abc .btn-icon {
-  width: 100%;
-  height: 100%;
-  padding: 0;
-}
-
-#tool-123 .btn-icon svg,
-#tool-abc .btn-icon svg {
-  width: 92%;
-  height: 92%;
-  display: block;
-}
-
-/* Keyboard (ABC) layout & controls */
-
-/* grid base */
+/* ---------------- Teclado (ABC) base ---------------- */
 .grid-6cols {
   display: grid;
   grid-template-columns: repeat(6, var(--key-w));
@@ -239,14 +175,10 @@ body {
   row-gap: var(--gap-vertical);
   justify-content: center;
 }
+#keyboard { column-gap: calc(var(--gap-horizontal) + 3px); }
 
-/* button base (ABC) */
-
-#keyboard {
-  column-gap: calc(var(--gap-horizontal) + 3px);
-}
-
-#keyboard>button {
+/* botões simples */
+#keyboard > button {
   width: 100%;
   height: 100%;
   min-width: var(--key-w);
@@ -265,29 +197,21 @@ body {
   box-sizing: border-box;
 }
 
-/* compound wrapper (caps + gear, etc) */
+/* compound (duas metades) */
 .compound-cell {
   width: 100%;
   height: 100%;
   background: transparent;
   border: none;
   border-radius: 8px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: transform .06s ease;
-  box-sizing: border-box;
-}
-
-.compound-cell {
   display: flex;
   flex-direction: row;
   gap: var(--compound-gap);
   align-items: stretch;
   justify-content: center;
   padding: 0;
+  box-sizing: border-box;
 }
-
 .compound-cell .half-btn {
   flex: 1 1 0;
   width: 50%;
@@ -304,21 +228,14 @@ body {
   padding: 0 6px;
   box-sizing: border-box;
 }
+#keyboard > button:hover,
+#keyboard > .compound-cell .half-btn:hover { transform: translateY(-2px); }
 
-/* hover */
-#keyboard>button:hover,
-#keyboard>.compound-cell .half-btn:hover {
-  transform: translateY(-2px);
-}
+/* visual de keys especiais (backspace, enter, etc) */
+#keyboard > button.key-special,
+#keyboard .compound-cell .half-btn.key-special { background: #97ecff; color: #000; }
 
-/* special key visuals */
-#keyboard>button.key-special,
-#keyboard .compound-cell .half-btn.key-special {
-  background: #97ecff;
-  color: #000;
-}
-
-/* space-row full-width bottom */
+/* barra de espaço (linha inferior) */
 #keyboard .space-row {
   grid-column: 1 / -1;
   min-height: var(--key-h);
@@ -334,37 +251,7 @@ body {
   box-sizing: border-box;
 }
 
-/* Ícones */
-.btn-icon {
-  width: 1.6em;
-  height: 1.6em;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.btn-icon svg {
-  width: 100%;
-  height: 100%;
-  display: block;
-}
-
-.space-row .space-icon {
-  width: 2.6em;
-  height: 2.2em;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.btn-icon:not(.preserve) svg {
-  fill: currentColor;
-  stroke: currentColor;
-}
-
-/* NUMPAD */
-
-/* numpad container */
+/* ---------------- NUMPAD (modo n úmero via data-mode no #keyboard) ---------------- */
 #keyboard[data-mode="numpad"] {
   display: grid;
   grid-template-columns: repeat(6, var(--key-w));
@@ -374,7 +261,20 @@ body {
   justify-content: center;
   align-items: start;
 }
-
+#keyboard[data-mode="numpad"] .num-btn {
+  min-width: var(--key-w);
+  min-height: calc(var(--key-h) * 2);
+  border-radius: 8px;
+  border: none;
+  background: var(--button-bg);
+  font-weight: 800;
+  font-size: calc(1em * 1.3);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-sizing: border-box;
+}
 #keyboard[data-mode="numpad"] .space-row {
   grid-column: 1 / -1;
   min-height: 80%;
@@ -390,30 +290,7 @@ body {
   box-sizing: border-box;
 }
 
-#keyboard[data-mode="numpad"] .space-row .space-icon {
-  width: 3.6em;
-  height: 3.2em;
-  font-weight: 500;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-#keyboard[data-mode="numpad"] .num-btn {
-  min-width: var(--key-w);
-  min-height: calc(var(--key-h) * 2);
-  border-radius: 8px;
-  border: none;
-  background: var(--button-bg);
-  font-weight: 800;
-  font-size: calc(1em * 1.3);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  box-sizing: border-box;
-}
-
+/* special-wrapper (coluna 6) -> estrutural; JS cria .sp-btn dentro */
 #keyboard[data-mode="numpad"] .special-wrapper {
   display: flex;
   flex-direction: column;
@@ -424,11 +301,10 @@ body {
   min-width: var(--key-w);
   box-sizing: border-box;
 }
-
 #keyboard[data-mode="numpad"] .special-wrapper .sp-btn {
   flex: 1 1 0;
   min-width: var(--key-w);
-  min-height: calc((var(--key-h) * 2 - var(--gap-vertical)) / 2 );
+  min-height: calc((var(--key-h) * 2 - var(--gap-vertical)) / 2);
   border-radius: 8px;
   background: var(--button-bg);
   display: inline-flex;
@@ -439,57 +315,65 @@ body {
   border: none;
   box-sizing: border-box;
 }
+#keyboard[data-mode="numpad"] .special-wrapper .sp-btn .btn-icon { width: 1.4em; height: 1.4em; }
 
-#keyboard[data-mode="numpad"] .special-wrapper .sp-btn .btn-icon {
-  width: 1.4em;
-  height: 1.4em;
-}
+/* ---------------- SELECTION RULES (linha -> confirmação) ---------------- */
+/* ROW SELECTED (primeira etapa) aplica ao botão ou às metades (.half-btn / .sp-btn) */
+#keyboard > button.row-selected,
+#keyboard[data-mode="numpad"] .num-btn.row-selected { background: var(--select-linha); color: #000; }
 
-/* SELECTION RULES (linha -> confirmação) */
-
-#keyboard>button.row-selected,
-#keyboard[data-mode="numpad"] .num-btn.row-selected {
+/* compound: aplica visual nas metades quando wrapper estiver "row-selected" (compatibilidade) */
+#keyboard .compound-cell.row-selected > .half-btn,
+#keyboard .compound-cell.row-selected .half-btn,
+#keyboard .compound-cell.row-selected .key-special,
+#keyboard .compound-cell.row-selected .btn-icon {
   background: var(--select-linha);
   color: #000;
 }
 
-#keyboard .compound-cell.row-selected>.half-btn {
-  background: var(--select-linha);
-  color: #000;
-}
-
+/* special-wrapper: apply directly to halves when JS adds row-selected on halves */
 #keyboard[data-mode="numpad"] .special-wrapper .sp-btn.row-selected {
   background: var(--select-linha);
   color: #000;
 }
 
-#keyboard .space-row.row-selected {
-  background: var(--select-linha);
-  color: #000;
-}
+/* space-row row-selected */
+#keyboard .space-row.row-selected { background: var(--select-linha); color: #000; }
 
-#keyboard>button.selected,
+/* SECOND STAGE: SELECTED (confirmação) -> override para cor de confirmação */
+#keyboard > button.selected,
 #keyboard[data-mode="numpad"] .num-btn.selected {
-  background: var(--button-selected);
-  color: #000;
+  background: var(--button-selected) !important;
+  color: #000 !important;
 }
-
-#keyboard .compound-cell .half-btn.selected {
-  background: var(--button-selected);
-  color: #000;
+#keyboard .compound-cell .half-btn.selected,
+#keyboard .compound-cell .key-special.selected,
+#keyboard .compound-cell .btn-icon.selected {
+  background: var(--button-selected) !important;
+  color: #000 !important;
 }
-
 #keyboard[data-mode="numpad"] .special-wrapper .sp-btn.selected {
-  background: var(--button-selected);
-  color: #000;
+  background: var(--button-selected) !important;
+  color: #000 !important;
 }
-
 #keyboard .space-row.selected {
-  background: var(--button-selected);
-  color: #000;
+  background: var(--button-selected) !important;
+  color: #000 !important;
 }
 
-/* Misc / helpers */
+/* ---------------- ÍCONES / Helpers visuais ---------------- */
+.btn-icon {
+  width: 1.6em;
+  height: 1.6em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.btn-icon svg { width: 100%; height: 100%; display: block; }
+.space-row .space-icon { width: 2.6em; height: 2.2em; display: inline-flex; align-items: center; justify-content: center; }
+.btn-icon:not(.preserve) svg { fill: currentColor; stroke: currentColor; }
+
+/* ---------------- Misc ---------------- */
 .icon-btn {
   display: inline-flex;
   align-items: center;
@@ -498,7 +382,6 @@ body {
   padding: 6px 8px;
   box-sizing: border-box;
 }
-
 #piscas {
   margin-top: 15px;
   font-size: 18px;
@@ -507,3 +390,64 @@ body {
   grid-column: 1 / -1;
   text-align: center;
 }
+
+/* ---------------- Controls: seleção linha + confirmação coluna ---------------- */
+/* linha (primeira etapa) */
+#controls .config-group .config-buttons.row-selected {
+  background: var(--select-linha);
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.06);
+}
+
+/* botões internos (segunda etapa: confirmação) */
+#controls .config-group .config-buttons button.selected {
+  background: var(--button-selected) !important;
+  color: #000 !important;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(0,0,0,0.12);
+}
+
+/* dar destaque leve ao botão dec/inc quando estiver somente em row-selected:
+   (aplica quando a linha inteira está row-selected, sem confirmação ainda) */
+#controls .config-group .config-buttons button {
+  transition: background .12s ease, transform .08s ease, color .08s ease;
+}
+#controls .config-group .config-buttons.row-selected button {
+  /* visual indicando que os botões estão ativos para seleção de coluna */
+  filter: brightness(0.98);
+}
+
+/* botões toggle (single button) quando "selected" também usam button-selected */
+#controls .config-group .config-buttons button.selected.icon-btn {
+  background: var(--button-selected) !important;
+  color: #000 !important;
+}
+
+/* Estilo do botão gear criado (id #settings-gear-btn) - aparência consistente */
+#settings-gear-btn {
+  width: 100%;
+  height: 100%;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 6px;
+  background: var(--toolbar-btn-bg);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+#settings-gear-btn:hover { transform: translateY(-2px); }
+
+/* quando o botão gear for marcado como row-selected/selected (no ciclo) */
+#settings-gear-btn.row-selected,
+#settings-gear-btn.selected {
+  background: var(--select-linha);
+}
+
+/* espacamento / alinhamento caso o grid adicione o novo grupo */
+#controls .config-grid .config-group {
+  min-height: 44px; /* garante espaço visual coerente ao receber o gear */
+}
+
+/* accessibilidade visual: quando linha está row-selected, garanta contraste do label */
+#controls .config-group.row-selected label { color: #fff; }
