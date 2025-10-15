@@ -1,9 +1,3 @@
-/* teclado.js - versão atualizada: garante reinício dos ciclos ao trocar de mode
-   - sempre reinicia toolbar/controls/keyboard do primeiro item
-   - usa delays já definidos (FIRST_ROW_DELAY, CONTROLS_FIRST_ROW_DELAY)
-   - mantém comportamento de controls (row-selected persistente durante coluna)
-*/
-
 const teclas = [
   'A','B','C','D',{ type:'action', action:'backspace', icon:'backspace' },
   { type:'compound', items: ['caps', { type: 'action', action: 'openTabs', icon: 'gear' }] },
