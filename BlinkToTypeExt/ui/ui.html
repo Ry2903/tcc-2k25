@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Blink To Type</title>
+  <link rel="stylesheet" href="../ui/ui.css">
+</head>
+<body>
+  
+  <!-- WELCOME -->
+  <div id="welcome" role="dialog" aria-hidden="false">
+    <div class="card">
+      <h1>Bem-vindo ao Blink To Type</h1>
+      <img id="welcome-logo" src="../icons/logo-128.png" alt="logo" />
+      <div class="welcome-actions">
+        <button id="btn-start" class="primary">Iniciar</button>
+        <button id="btn-close" class="secondary">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN UI -->
+  <div id="main" class="hidden" aria-hidden="true">
+    <div id="ui-wrap">
+      <div id="keyboard-panel">
+        <div id="toolbar-panel">
+          <div id="toolbar-placeholder"></div>
+        </div>
+        <div id="keyboard" class="grid-6cols"></div>
+        <div id="controls" class="hidden" aria-hidden="true">
+          <div class="config-grid"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCRIPTS (ordem crítica) -->
+  <script src="../libs/face-api.min.js"></script>
+  <script src="../src/script.js"></script>
+  <script src="../src/teclado.js"></script>
+  <script src="../ui/ui-main.js"></script>
+</body>
+</html>

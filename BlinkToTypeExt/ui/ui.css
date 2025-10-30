@@ -1,0 +1,647 @@
+/* ui.css — reorganizado e limpo (valores inalterados) */
+
+/* ---------------- variables / root ---------------- */
+:root {
+    --bg-color: hsl(0, 0%, 12%);
+    --panel-color: #162D42;
+    --button-bg: #70add6;
+    --button-selected: #00cfff;
+    --button-text: #000;
+    --input-bg: #8ed4ffa4;
+    --input-text: #fff;
+    --text-color: #eee;
+    --select-linha: #328fce;
+    --highlight: #8ED4FF;
+    --border-radius: 8px;
+
+    /* Dimensões ajustáveis */
+    --key-w: 85px;
+    --key-h: 38px;
+    --gap-vertical: 6px;
+    --gap-horizontal: 10px;
+    --compound-gap: 6px;
+
+    --key-font-size: 1.06rem;
+    --icon-scale: 0.70;
+
+    --toolbar-bg: #49647C;
+    --toolbar-btn-bg: rgba(151, 164, 175, 0.45);
+    --max-keyboard-width: none;
+}
+
+/* ---------------- Reset / base ---------------- */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html, body {
+    height: 100%;
+}
+
+body {
+    font-family: "Segoe UI", Roboto, Arial, sans-serif;
+    background: var(--panel-color);
+    color: var(--text-color);
+    padding: 5px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* ---------------- WELCOME (início) ---------------- */
+#welcome {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    padding: 18px;
+    background: var(--panel-color);
+}
+
+#welcome .card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    background: var(--button-bg);
+    border-radius: var(--border-radius);
+    padding: 18px;
+    max-width: 520px;
+    width: 100%;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+}
+
+#welcome .card h1 {
+    font-size: 1.15rem;
+    color: #fff;
+    margin-bottom: 6px;
+    text-align: center;
+}
+
+#welcome #welcome-logo {
+    width: 160px;
+    height: auto;
+    display: block;
+    margin: 0 auto;
+}
+
+.welcome-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 6px;
+}
+
+.welcome-actions .primary {
+    background: var(--panel-color);
+    color: #fff;
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: none;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.welcome-actions .secondary {
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #fff;
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+/* ---------------- Main / wrapper ---------------- */
+#main {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+}
+
+#main.hidden {
+    display: none;
+}
+
+#ui-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    align-items: center;
+    justify-content: flex-start;
+    width: 100%;
+}
+
+/* ---------------- keyboard panel ---------------- */
+#keyboard-panel {
+    background: var(--panel-color);
+    padding: 10px;
+    border-radius: var(--border-radius);
+    border: 2px solid rgba(0, 0, 0, 0.25);
+    /* width calculada para 6 colunas + gaps + margem interna (ajuste se precisar) */
+    width: calc((var(--key-w) * 6) + (var(--gap-horizontal) * 5) + 40px);
+    max-width: 100%;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+    box-sizing: border-box;
+    overflow: visible;
+}
+
+/* ---------------- Toolbar (acima do teclado) ---------------- */
+.toolbar {
+    background: var(--toolbar-bg);
+    border-radius: 8px;
+    padding: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    box-sizing: border-box;
+    width: 100%;
+}
+
+.toolbar .tool-group {
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    width: 100%;
+    gap: 8px;
+}
+
+.toolbar .tool-btn {
+    width: 2.6em;
+    height: 2.6em;
+    border-radius: 50%;
+    background: var(--toolbar-btn-bg);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border: none;
+    padding: 6px;
+    transition: transform .08s ease, background .08s ease;
+    box-sizing: border-box;
+}
+
+.toolbar .tool-btn .btn-icon {
+    width: 100%;
+    height: 100%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+}
+
+.toolbar .tool-btn:hover {
+    transform: translateY(-3px);
+}
+
+.toolbar .tool-btn.row-selected,
+.toolbar .tool-btn.selected {
+    background: var(--select-linha);
+    color: #000;
+}
+
+#tool-123, #tool-abc {
+    width: 2.8em;
+    height: 2.8em;
+    min-width: 2.8em;
+    min-height: 2.8em;
+    padding: .12em;
+    box-sizing: border-box;
+}
+
+/* ---------------- GRID: teclado (6 colunas) ---------------- */
+.grid-6cols {
+    display: grid;
+    grid-template-columns: repeat(6, var(--key-w));
+    grid-auto-rows: var(--key-h);
+    column-gap: var(--gap-horizontal);
+    row-gap: var(--gap-vertical);
+    justify-content: center;
+    width: 100%;
+}
+
+/* o container #keyboard recebe margin-top conforme pedido */
+#keyboard {
+    margin-top: var(--gap-horizontal);
+    align-content: start;
+    width: 100%;
+}
+
+/* ---------------- teclas base ---------------- */
+#keyboard > button {
+    width: 100%;
+    height: 100%;
+    background: var(--button-bg);
+    border: none;
+    border-radius: 8px;
+    font-size: var(--key-font-size);
+    font-weight: 700;
+    color: #000;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: transform .06s ease;
+    box-sizing: border-box;
+}
+
+.compound-cell {
+  display: flex;
+  gap: var(--compound-gap);
+  align-items: stretch;
+  justify-content: stretch;
+  padding: 0;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.compound-cell:not(.special-wrapper) .half-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  height: var(--key-h);
+  border-radius: 6px;
+  border: none;
+  background: var(--button-bg);
+  color: #000;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-sizing: border-box;
+  font-size: calc(var(--key-font-size) * 0.95); /* slightly smaller */
+}
+
+.compound-cell.special-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-vertical);
+  align-items: stretch;
+  justify-content: stretch;
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.compound-cell.special-wrapper .sp-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: calc((var(--key-h) * 2 - var(--gap-vertical)) / 2);
+  border-radius: 8px;
+  background: var(--button-bg);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  cursor: pointer;
+  border: none;
+  box-sizing: border-box;
+  font-size: calc(var(--key-font-size) * 0.95);
+}
+
+/* ---------------- Space Row ---------------- */
+#keyboard .space-row {
+    grid-column: 1 / -1;
+    min-height: var(--key-h);
+    height: var(--key-h);
+    border-radius: 8px;
+    font-size: 2rem;
+    background: var(--button-bg);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    cursor: pointer;
+    border: none;
+    box-sizing: border-box;
+}
+
+/* ---------------- Numpad adjustments ---------------- */
+#keyboard[data-mode="numpad"] {
+    display: grid;
+    grid-template-columns: repeat(6, var(--key-w));
+    grid-auto-rows: calc(var(--key-h) * 2);
+    column-gap: var(--gap-horizontal);
+    row-gap: var(--gap-vertical);
+    justify-content: center;
+    align-items: start;
+}
+
+#keyboard[data-mode="numpad"] .num-btn {
+    min-width: var(--key-w);
+    min-height: calc(var(--key-h) * 2);
+    border-radius: 8px;
+    border: none;
+    background: var(--button-bg);
+    font-weight: 800;
+    font-size: 1.4rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-sizing: border-box;
+}
+
+#keyboard[data-mode="numpad"] .space-row {
+    grid-column: 1 / -1;
+    min-height: 80%;
+    height: 100%;
+    border-radius: 8px;
+    background: var(--button-bg);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    cursor: pointer;
+    border: none;
+    box-sizing: border-box;
+}
+
+/* space-icon sizing (keyboard and numpad) */
+#keyboard .space-row .space-icon,
+#keyboard[data-mode="numpad"] .space-row .space-icon {
+    width: calc(var(--key-h) * 1.5);
+    height: calc(var(--key-h) * 1.5);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* special-wrapper (numpad) heights */
+#keyboard[data-mode="numpad"] .special-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-vertical);
+    align-items: center;
+    justify-content: stretch;
+    height: calc((var(--key-h) * 2 * 2) + var(--gap-vertical));
+    min-width: var(--key-w);
+    box-sizing: border-box;
+}
+
+#keyboard[data-mode="numpad"] .special-wrapper .sp-btn {
+    flex: 1 1 0;
+    min-width: var(--key-w);
+    min-height: calc((var(--key-h) * 2 - var(--gap-vertical)) / 2);
+    border-radius: 8px;
+    background: var(--button-bg);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    cursor: pointer;
+    border: none;
+    box-sizing: border-box;
+}
+
+#keyboard[data-mode="numpad"] .special-wrapper .sp-btn .btn-icon {
+    width: 1.4em;
+    height: 1.4em;
+}
+
+/* ---------------- SELECTION RULES (linha -> confirmação) ---------------- */
+#keyboard > button.row-selected,
+#keyboard[data-mode="numpad"] .num-btn.row-selected {
+    background: var(--select-linha);
+    color: #000;
+}
+
+#keyboard .compound-cell.row-selected > .half-btn,
+#keyboard .compound-cell.row-selected .half-btn,
+#keyboard .compound-cell.row-selected .key-special,
+#keyboard .compound-cell.row-selected .btn-icon {
+    background: var(--select-linha);
+    color: #000;
+}
+
+#keyboard[data-mode="numpad"] .special-wrapper .sp-btn.row-selected {
+    background: var(--select-linha);
+    color: #000;
+}
+
+#keyboard .space-row.row-selected {
+    background: var(--select-linha);
+    color: #000;
+}
+
+/* SECOND STAGE: SELECTED (confirmação) -> override para cor de confirmação */
+#keyboard > button.selected,
+#keyboard[data-mode="numpad"] .num-btn.selected {
+    background: var(--button-selected) !important;
+    color: #000 !important;
+}
+
+#keyboard .compound-cell .half-btn.selected,
+#keyboard .compound-cell .key-special.selected,
+#keyboard .compound-cell .btn-icon.selected {
+    background: var(--button-selected) !important;
+    color: #000 !important;
+}
+
+#keyboard[data-mode="numpad"] .special-wrapper .sp-btn.selected {
+    background: var(--button-selected) !important;
+    color: #000 !important;
+}
+
+#keyboard .space-row.selected {
+    background: var(--button-selected) !important;
+    color: #000 !important;
+}
+
+/* ---------------- ICON sizing (relativa à key height) ---------------- */
+.btn-icon {
+    width: calc(var(--key-h) * var(--icon-scale));
+    height: calc(var(--key-h) * var(--icon-scale));
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-icon svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+/* coloriza apenas quando não é preserve */
+.btn-icon:not(.preserve) svg {
+    fill: currentColor;
+    stroke: currentColor;
+}
+
+/* ---------------- CONTROLS (painel de ajustes — criado por JS) ---------------- */
+#controls {
+    display: none; /* visível apenas quando o JS trocar o painel */
+    background: var(--panel-color);
+    padding: 12px;
+    border-radius: var(--border-radius);
+    width: 100%;
+    box-sizing: border-box;
+    /* não fixar height aqui — permitimos que o painel cresça conforme necessário */
+}
+
+/* grid interno dos controles (duas colunas) */
+#controls .config-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+}
+
+/* cada grupo/linha dos controles */
+#controls .config-group {
+    display: flex;
+    flex-direction: column;
+    text-align: left;
+    min-height: 44px;
+}
+
+/* wrapper dos botões do grupo */
+#controls .config-buttons {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--input-bg);
+    padding: 6px 10px;
+    border-radius: 6px;
+    box-sizing: border-box;
+}
+
+/* botões dentro dos controles (visual padrão) */
+#controls .config-buttons button {
+    background: var(--button-bg);
+    color: var(--button-text);
+    border: none;
+    border-radius: 4px;
+    padding: 6px 10px;
+    cursor: pointer;
+    font-size: .9em;
+}
+
+/* hover / seleção dos controles */
+#controls .config-buttons button:hover {
+    background: var(--highlight);
+}
+
+#controls .config-group.row-selected label {
+    color: #fff;
+}
+
+/* botão icone utilizado no controls */
+.icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 6px 8px;
+    box-sizing: border-box;
+}
+
+/* botao de gear (voltar para toolbar) */
+#settings-gear-btn {
+    width: 100%;
+    height: 100%;
+    padding: 6px 8px;
+    border: none;
+    border-radius: 6px;
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+#settings-gear-btn:hover {
+    transform: translateY(-2px);
+}
+
+#settings-gear-btn.row-selected,
+#settings-gear-btn.selected {
+    background: var(--select-linha);
+}
+
+/* estilo de botão selecionado dentro dos controles */
+#controls .config-group .config-buttons button.selected {
+    background: var(--button-selected) !important;
+    color: #000 !important;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.12);
+}
+
+#controls .config-group .config-buttons button.selected.icon-btn {
+    background: var(--button-selected) !important;
+    color: #000 !important;
+}
+
+/* ---------------- misc / mensagens ---------------- */
+#piscas {
+    margin-top: 8px;
+    font-size: 14px;
+    color: var(--highlight);
+    font-weight: 700;
+    text-align: center;
+}
+
+/* hidden utilitário */
+.hidden {
+    display: none !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
+}
+
+/* CAMERA SETUP styles */
+#camera-setup {
+  display: none; /* JS exibirá removendo .hidden */
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px;
+}
+#camera-setup .camera-card {
+  width: 100%;
+  max-width: calc((var(--key-w) * 6) + (var(--gap-horizontal) * 5) + 40px);
+  box-sizing: border-box;
+  background: var(--panel-color);
+  padding: 12px;
+  border-radius: var(--border-radius);
+}
+#camera-setup .camera-stage {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+}
+#camera-setup video, #camera-setup canvas {
+  max-width: 320px;
+  max-height: 240px;
+  border-radius: 6px;
+  background: #000;
+}
+.blink-indicator {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.06);
+  border: 2px solid rgba(255,255,255,0.06);
+  transition: box-shadow .14s ease, background .12s ease;
+}
+.blink-indicator.blink-flash {
+  box-shadow: 0 0 0 6px rgba(142,212,255,0.22);
+  background: var(--button-selected);
+}
+
+/* ---------------- responsive adjustments ---------------- */
+@media (max-width:520px) {
+    :root {
+        --key-h: 34px;
+        --gap-horizontal: 8px;
+        --key-font-size: 1rem;
+    }
+}
+
+@media (max-width:420px) {
+    :root {
+        --key-h: 30px;
+        --gap-horizontal: 6px;
+        --key-font-size: 0.98rem;
+    }
+}
