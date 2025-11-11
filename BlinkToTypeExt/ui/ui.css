@@ -229,6 +229,13 @@ body {
     width: 100%;
 }
 
+#keyboard.hidden {
+    display: none !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+}
+
 /* ---------------- teclas base ---------------- */
 #keyboard>button {
     width: 100%;
@@ -324,14 +331,14 @@ body {
     grid-template-columns: repeat(6, var(--key-w));
     grid-auto-rows: calc(var(--key-h) * 2);
     column-gap: var(--gap-horizontal);
-    row-gap: var(--gap-vertical);
+    row-gap: calc(var(--gap-vertical) + 5px);
     justify-content: center;
     align-items: start;
 }
 
 #keyboard[data-mode="numpad"] .num-btn {
     min-width: var(--key-w);
-    min-height: calc(var(--key-h) * 2);
+    min-height: calc(var(--key-h) * 2 + 3px);
     border-radius: 8px;
     border: none;
     background: var(--button-bg);
@@ -346,7 +353,7 @@ body {
 
 #keyboard[data-mode="numpad"] .space-row {
     grid-column: 1 / -1;
-    min-height: 80%;
+    min-height: var(--key-h);
     height: 100%;
     border-radius: 8px;
     background: var(--button-bg);
@@ -369,22 +376,23 @@ body {
     justify-content: center;
 }
 
-/* special-wrapper (numpad) heights */
-#keyboard[data-mode="numpad"] .special-wrapper {
+/* special-wrapper (numpad) - VERTICALLY STACKED */
+#keyboard[data-mode="numpad"] .special-wrapper-top,
+#keyboard[data-mode="numpad"] .special-wrapper-bottom {
     display: flex;
     flex-direction: column;
-    gap: var(--gap-vertical);
-    align-items: center;
+    gap: calc(var(--gap-vertical) - 3px);
+    align-items: stretch;
     justify-content: stretch;
-    height: calc((var(--key-h) * 2 * 2) + var(--gap-vertical));
     min-width: var(--key-w);
     box-sizing: border-box;
 }
 
-#keyboard[data-mode="numpad"] .special-wrapper .sp-btn {
-    flex: 1 1 0;
-    min-width: var(--key-w);
-    min-height: calc((var(--key-h) * 2 - var(--gap-vertical)) / 2);
+#keyboard[data-mode="numpad"] .special-wrapper-top .sp-btn,
+#keyboard[data-mode="numpad"] .special-wrapper-bottom .sp-btn {
+    flex: 1 1 auto;
+    min-width: 100%;
+    min-height: var(--key-h);
     border-radius: 8px;
     background: var(--button-bg);
     display: inline-flex;
@@ -396,9 +404,10 @@ body {
     box-sizing: border-box;
 }
 
-#keyboard[data-mode="numpad"] .special-wrapper .sp-btn .btn-icon {
-    width: 1.4em;
-    height: 1.4em;
+#keyboard[data-mode="numpad"] .special-wrapper-top .sp-btn .btn-icon,
+#keyboard[data-mode="numpad"] .special-wrapper-bottom .sp-btn .btn-icon {
+    width: 1.2em;
+    height: 1.2em;
 }
 
 /* ---------------- SELECTION RULES (linha -> confirmação) ---------------- */
@@ -471,26 +480,32 @@ body {
     stroke: currentColor;
 }
 
-/* ---------------- CONTROLS (painel de ajustes — criado por JS) ---------------- */
+/* ---------------- CONTROLS ---------------- */
 #controls {
     display: none;
-    /* visível apenas quando o JS trocar o painel */
     background: var(--panel-color);
     padding: 12px;
     border-radius: var(--border-radius);
     width: 100%;
     box-sizing: border-box;
-    /* não fixar height aqui — permitimos que o painel cresça conforme necessário */
 }
 
-/* grid interno dos controles (duas colunas) */
+#controls:not(.hidden) {
+    display: block !important;
+}
+
+#controls.hidden {
+    display: none !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
+}
+
 #controls .config-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 8px;
 }
 
-/* cada grupo/linha dos controles */
 #controls .config-group {
     display: flex;
     flex-direction: column;
@@ -498,7 +513,13 @@ body {
     min-height: 44px;
 }
 
-/* wrapper dos botões do grupo */
+#controls .config-group label {
+    color: #ccc;
+    margin-bottom: 6px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
 #controls .config-buttons {
     display: flex;
     align-items: center;
@@ -509,7 +530,6 @@ body {
     box-sizing: border-box;
 }
 
-/* botões dentro dos controles (visual padrão) */
 #controls .config-buttons button {
     background: var(--button-bg);
     color: var(--button-text);
@@ -518,18 +538,40 @@ body {
     padding: 6px 10px;
     cursor: pointer;
     font-size: .9em;
+    font-weight: 700;
+    transition: all 0.2s ease;
 }
 
-/* hover / seleção dos controles */
 #controls .config-buttons button:hover {
     background: var(--highlight);
+    transform: translateY(-2px);
 }
 
+/* row-selected (primeira passagem - linha) */
 #controls .config-group.row-selected label {
+    color: #fff;
+    font-weight: 700;
+}
+
+#controls .config-group.row-selected .config-buttons {
+    background: rgba(50, 143, 206, 0.3);
+    border: 1px solid var(--select-linha);
+}
+
+#controls .config-group.row-selected .config-buttons button {
+    background: var(--select-linha);
     color: #fff;
 }
 
-/* botão icone utilizado no controls */
+/* selected (segunda passagem - coluna/botão específico) */
+#controls .config-buttons button.selected {
+    background: var(--button-selected) !important;
+    color: #000 !important;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.12);
+}
+
+/* icon button styling */
 .icon-btn {
     display: inline-flex;
     align-items: center;
@@ -539,7 +581,7 @@ body {
     box-sizing: border-box;
 }
 
-/* botao de gear (voltar para toolbar) */
+/* gear button (voltar para toolbar) */
 #settings-gear-btn {
     width: 100%;
     height: 100%;
@@ -551,10 +593,13 @@ body {
     align-items: center;
     justify-content: center;
     cursor: pointer;
+    background: rgba(255, 255, 255, 0.1);
+    transition: all 0.2s ease;
 }
 
 #settings-gear-btn:hover {
     transform: translateY(-2px);
+    background: rgba(255, 255, 255, 0.15);
 }
 
 #settings-gear-btn.row-selected,
@@ -575,6 +620,137 @@ body {
     color: #000 !important;
 }
 
+/* ============ FIELD SELECTOR STYLES ============ */
+#field-selector {
+    padding: 20px;
+    background: var(--panel-color);
+    border-radius: var(--border-radius);
+    width: 100%;
+    box-sizing: border-box;
+}
+
+#field-selector.hidden {
+  display: none !important;
+}
+
+.field-selector-title {
+    color: #fff;
+    margin-bottom: 15px;
+    font-size: 18px;
+    text-align: center;
+    font-weight: 700;
+    margin: 0 0 15px 0;
+}
+
+/* Lista de campos */
+.campo-lista {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+/* Aviso quando não há campos */
+.campo-aviso {
+    color: #999;
+    font-style: italic;
+    text-align: center;
+    padding: 20px;
+    margin: 0;
+}
+
+/* Botão de campo */
+.campo-btn {
+    padding: 12px 16px;
+    background: rgba(142, 212, 255, 0.1);
+    border: 2px solid transparent;
+    border-radius: 6px;
+    color: #fff;
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.campo-btn-label {
+    font-weight: 700;
+    margin-bottom: 4px;
+}
+
+.campo-btn-info {
+    font-size: 12px;
+    color: #8ED4FF;
+}
+
+/* Campo ativo */
+.campo-btn-ativo {
+    border-color: #4ade80;
+    background: rgba(74, 222, 128, 0.2);
+}
+
+/* Row selected (primeira passagem - linha) */
+.campo-btn.row-selected {
+    border-color: var(--select-linha);
+    background: rgba(50, 143, 206, 0.3);
+    box-shadow: inset 0 0 0 1px var(--select-linha);
+}
+
+/* Selected (segunda passagem - botão específico) */
+.campo-btn.selected {
+    border-color: var(--button-selected);
+    background: rgba(0, 207, 255, 0.3);
+    box-shadow: 0 0 0 2px var(--button-selected);
+}
+
+/* Footer com gear */
+.field-selector-footer {
+    display: flex;
+    gap: 10px;
+    margin-top: 15px;
+    justify-content: center;
+}
+
+#field-selector-gear {
+    padding: 10px 20px;
+    background: rgba(255, 255, 255, 0.1);
+    border: none;
+    border-radius: 6px;
+    color: #fff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s;
+}
+
+#field-selector-gear:hover {
+    background: rgba(255, 255, 255, 0.15);
+    transform: translateY(-2px);
+}
+
+#field-selector-gear.row-selected,
+#field-selector-gear.selected {
+    background: var(--select-linha);
+}
+
+/* Scrollbar customizada para lista de campos */
+.campo-lista::-webkit-scrollbar {
+    width: 8px;
+}
+
+.campo-lista::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+}
+
+.campo-lista::-webkit-scrollbar-thumb {
+    background: rgba(142, 212, 255, 0.5);
+    border-radius: 4px;
+}
+
 /* ---------------- misc / mensagens ---------------- */
 #piscas {
     margin-top: 8px;
@@ -584,11 +760,11 @@ body {
     text-align: center;
 }
 
-/* hidden utilitário */
 .hidden {
     display: none !important;
     opacity: 0 !important;
     visibility: hidden !important;
+    pointer-events: none !important;
 }
 
 /* Highlight do campo de texto ativo */
@@ -606,10 +782,6 @@ body {
     border-radius: 8px;
     margin: 20px auto;
     max-width: 600px;
-}
-
-.campo-btn:hover {
-    transform: translateX(4px);
 }
 
 .campo-btn:active {
@@ -686,6 +858,14 @@ body {
         --key-h: 34px;
         --gap-horizontal: 8px;
         --key-font-size: 1rem;
+    }
+
+    #field-selector {
+        padding: 15px;
+    }
+
+    .campo-btn {
+        padding: 10px 12px;
     }
 }
 
