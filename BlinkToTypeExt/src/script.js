@@ -15,10 +15,10 @@
   let showVideoInCanvas = true;
 
   // EAR / blink thresholds (padrões)
-  let EAR_THRESHOLD = 0.269;
-  let EAR_CONSEC_FRAMES = 2;
-  let EAR_REOPEN_FRAMES = 2;
-  let DEBOUNCE_AFTER_BLINK = 12; // frames
+  let EAR_THRESHOLD = 0.279;
+  let EAR_CONSEC_FRAMES = 1.5;
+  let EAR_REOPEN_FRAMES = 1.5;
+  let DEBOUNCE_AFTER_BLINK = 2; // frames
 
   // contadores temporários
   let earBelowFrames = 0;
@@ -64,19 +64,19 @@
       const el = document.getElementById('threshold-val'); if (el) el.textContent = EAR_THRESHOLD.toFixed(3);
     };
     if (framesDec) framesDec.onclick = () => {
-      EAR_CONSEC_FRAMES = Math.max(1, EAR_CONSEC_FRAMES - 1);
+      EAR_CONSEC_FRAMES = Math.max(1, EAR_CONSEC_FRAMES - 0.1);
       const el = document.getElementById('frames-val'); if (el) el.textContent = EAR_CONSEC_FRAMES;
     };
     if (framesInc) framesInc.onclick = () => {
-      EAR_CONSEC_FRAMES = Math.min(6, EAR_CONSEC_FRAMES + 1);
+      EAR_CONSEC_FRAMES = Math.min(6, EAR_CONSEC_FRAMES + 0.1);
       const el = document.getElementById('frames-val'); if (el) el.textContent = EAR_CONSEC_FRAMES;
     };
     if (debDec) debDec.onclick = () => {
-      DEBOUNCE_AFTER_BLINK = Math.max(0, DEBOUNCE_AFTER_BLINK - 2);
+      DEBOUNCE_AFTER_BLINK = Math.max(0, DEBOUNCE_AFTER_BLINK - 0.1);
       const el = document.getElementById('debounce-val'); if (el) el.textContent = (DEBOUNCE_AFTER_BLINK / 1000).toFixed(2);
     };
     if (debInc) debInc.onclick = () => {
-      DEBOUNCE_AFTER_BLINK = Math.min(100, DEBOUNCE_AFTER_BLINK + 2);
+      DEBOUNCE_AFTER_BLINK = Math.min(100, DEBOUNCE_AFTER_BLINK + 0.1);
       const el = document.getElementById('debounce-val'); if (el) el.textContent = (DEBOUNCE_AFTER_BLINK / 1000).toFixed(2);
     };
 

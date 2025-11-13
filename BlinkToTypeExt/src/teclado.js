@@ -92,7 +92,7 @@ function setCampoTextoAtivo(elemento) {
     campoTextoAtivo = null;
 
     // grava índice para debug/persistência (útil para testes)
-    try { window.__kb_lastExternalIndex = elemento.index; } catch (e) {}
+    try { window.__kb_lastExternalIndex = elemento.index; } catch (e) { }
 
     // Solicita foco no campo externo (content script lidará com isso)
     window.parent.postMessage({
@@ -794,29 +794,20 @@ function formatarLabel(item) {
 
 function processarTecla(item) {
   const out = getCampoTextoAtivo();
-  
-  if (window.__kb_debug) console.log('[KB] processarTecla ->', { item, campoTextoMetadata, outIsExternal: !!(out && out.isExternal) });
-
-  if (!out) {
-    detectarCamposTexto().then(campos => {
-      if (campos && campos.length > 0) setCampoTextoAtivo(campos[0]);
-    }).catch(() => {});
-  }
-
-  const isExternal = out && typeof out === 'object' && out.isExternal;
+  const outIsExternal = !!(out && out.isExternal);
 
   if (typeof item === 'object' && item !== null && item.type === 'action') {
     switch (item.action) {
       case 'clearAll':
-        if (isExternal) enviarAcaoParaCampoExterno('clearAll');
+        if (outIsExternal) enviarAcaoParaCampoExterno('clearAll');
         else if (out) out.value = '';
         return;
       case 'openTabs':
         setActivePanel('toolbar');
         return;
       case 'backspace':
-        if (isExternal) enviarAcaoParaCampoExterno('backspace');
-        else if (out) out.value = (out.value || '').slice(0, -1);
+        if (outIsExternal) enviarAcaoParaCampoExterno('backspace');
+        else if (out) out.value = out.value.slice(0, -1);
         return;
       default:
         document.dispatchEvent(new CustomEvent('keyboard:action', { detail: { action: item.action, raw: item } }));
@@ -830,78 +821,50 @@ function processarTecla(item) {
     return;
   }
 
-  // ✅ ENTER CORRIGIDO
   if (item === 'enter') {
-    if (window.__kb_debug) console.log('[KB] 🔵 ENTER pressionado - campo externo?', isExternal);
-    
-    if (isExternal) {
-      // Envia ao content script para disparar submit
-      enviarAcaoParaCampoExterno('enter');
-    } else {
-      // Campo interno: tenta encontrar form pai e submeter
-      if (out && out.form) {
-        try {
-          out.form.submit();
-          if (window.__kb_debug) console.log('[KB] ✅ Form submetido');
-        } catch (e) {
-          // Se submit() não funcionar, tenta disparar evento
-          const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
-          if (out.form.dispatchEvent(submitEvent)) {
-            if (window.__kb_debug) console.log('[KB] ✅ Submit event disparado');
-          }
-        }
-      } else {
-        // Fallback: dispara KeyboardEvent Enter
-        if (out) {
-          const enterEvent = new KeyboardEvent('keydown', {
-            key: 'Enter',
-            code: 'Enter',
-            keyCode: 13,
-            which: 13,
-            bubbles: true,
-            cancelable: true
-          });
-          out.dispatchEvent(enterEvent);
-          if (window.__kb_debug) console.log('[KB] ✅ Enter KeyboardEvent disparado');
-        }
-      }
-      
-      // Dispara evento customizado também
-      document.dispatchEvent(new CustomEvent('keyboard:enter', { 
-        detail: { value: out ? out.value : undefined } 
-      }));
-    }
+    if (outIsExternal) enviarAcaoParaCampoExterno('enter');
+    else document.dispatchEvent(new CustomEvent('keyboard:enter', { detail: { value: out ? out.value : undefined } }));
     return;
   }
 
   if (item === 'space') {
-    if (isExternal) enviarTextoParaCampoExterno(' ');
-    else if (out) out.value = (out.value || '') + ' ';
+    if (outIsExternal) enviarTextoParaCampoExterno(' ');
+    else if (out) out.value += ' ';
     return;
   }
 
   if (typeof item === 'object' && item !== null && item.type === 'special') {
     if (item.char === 'enter') {
-      // Usa mesma lógica do enter acima
-      processarTecla('enter');
+      if (outIsExternal) enviarAcaoParaCampoExterno('enter');
+      else document.dispatchEvent(new CustomEvent('keyboard:enter', { detail: { value: out ? out.value : undefined } }));
       return;
     }
   }
 
   if (typeof item === 'string') {
     const ch = formatarLabel(item);
-    if (isExternal) {
+    if (outIsExternal) {
       enviarTextoParaCampoExterno(ch);
     } else if (out) {
-      out.value = (out.value || '') + ch;
+      // tenta focar e inserir no elemento DOM local (iframe)
+      try { if (typeof out.focus === 'function') out.focus(); } catch (e) { }
+      if (out && typeof out.setRangeText === 'function') {
+        // usa setRangeText quando disponível (textarea/input)
+        try {
+          out.setRangeText(ch, out.selectionStart || out.value.length, out.selectionEnd || out.value.length, 'end');
+        } catch (e) { out.value += ch; }
+      } else {
+        out.value += ch;
+      }
     } else {
-      if (window.__kb_debug) console.warn('[KB] processarTecla: sem campo disponível');
+      document.dispatchEvent(new CustomEvent('keyboard:char', { detail: { char: ch } }));
     }
     return;
   }
 
   if (window.__kb_debug) console.warn('processarTecla: item não reconhecido', item);
 }
+
 
 /* ============ CRIAR KEYBOARD ============ */
 function getKeyboardContainer() {
@@ -922,7 +885,7 @@ function criarTeclado() {
 
   const container = getKeyboardContainer();
   if (!container) return;
-  
+
   // ✅ LIMPA COMPLETAMENTE antes de recriar
   container.innerHTML = '';
   botoesTeclado = [];
@@ -947,14 +910,14 @@ function criarTeclado() {
           if (sub.icon) half.dataset.icon = sub.icon;
           if (sub.action) half.dataset.action = sub.action;
           half.innerHTML = getIconHTML(sub.icon || '');
-          
+
           // ✅ USA ONCLICK AO INVÉS DE ADDEVENTLISTENER
-          half.onclick = () => { 
-            if (activeMode !== 'keyboard') return; 
-            processarTecla(sub); 
-            resetSelection(); 
+          half.onclick = () => {
+            if (activeMode !== 'keyboard') return;
+            processarTecla(sub);
+            resetSelection();
           };
-          
+
           window.__kb_specials[half.id] = half;
           const aliasId = `key-action-${sub.icon || sub.action || idKey}`;
           window.__kb_specials_aliases[aliasId] = half;
@@ -962,22 +925,19 @@ function criarTeclado() {
         } else {
           if (sub === 'enter') {
             half.classList.add('key-special', 'icon-btn');
+            half.dataset.value = 'enter';                     // <-- ADICIONADO
             half.innerHTML = getIconHTML('enter');
-            half.onclick = () => { 
-              if (activeMode !== 'keyboard') return; 
-              processarTecla('enter'); 
-              resetSelection(); 
-            };
+            half.addEventListener('click', () => { if (activeMode !== 'keyboard') return; processarTecla('enter'); resetSelection(); });
             window.__kb_specials[half.id] = half;
             half.setAttribute('data-alias-id', `key-action-enter-${index}-${subIndex}`);
           } else if (sub === 'caps') {
             half.classList.add('key-special', 'icon-btn');
             half.textContent = formatarLabel('caps');
             half.dataset.value = 'caps';
-            half.onclick = () => { 
-              if (activeMode !== 'keyboard') return; 
-              processarTecla('caps'); 
-              resetSelection(); 
+            half.onclick = () => {
+              if (activeMode !== 'keyboard') return;
+              processarTecla('caps');
+              resetSelection();
             };
             window.__kb_specials[half.id] = half;
             half.setAttribute('data-alias-id', `key-action-caps-${index}-${subIndex}`);
@@ -985,10 +945,10 @@ function criarTeclado() {
             half.textContent = formatarLabel(sub);
             if (especiais.includes(sub)) half.classList.add('key-special');
             half.dataset.value = (typeof sub === 'string') ? sub : '';
-            half.onclick = () => { 
-              if (activeMode !== 'keyboard') return; 
-              processarTecla(sub); 
-              resetSelection(); 
+            half.onclick = () => {
+              if (activeMode !== 'keyboard') return;
+              processarTecla(sub);
+              resetSelection();
             };
           }
         }
@@ -1011,14 +971,14 @@ function criarTeclado() {
       if (item.icon) btn.dataset.icon = item.icon;
       if (item.action) btn.dataset.action = item.action;
       btn.innerHTML = getIconHTML(item.icon || '');
-      
+
       // ✅ USA ONCLICK
-      btn.onclick = () => { 
-        if (activeMode !== 'keyboard') return; 
-        processarTecla(item); 
-        resetSelection(); 
+      btn.onclick = () => {
+        if (activeMode !== 'keyboard') return;
+        processarTecla(item);
+        resetSelection();
       };
-      
+
       container.appendChild(btn);
       botoesTeclado.push({ el: btn, type: 'action', value: item, icon: item.icon || null, action: item.action || null, index });
       window.__kb_specials[btn.id] = btn;
@@ -1030,11 +990,8 @@ function criarTeclado() {
         btn.innerHTML = getIconHTML('enter');
         btn.id = `key-special-enter-${index}`;
         btn.classList.add('key-special', 'icon-btn');
-        btn.onclick = () => { 
-          if (activeMode !== 'keyboard') return; 
-          processarTecla('enter'); 
-          resetSelection(); 
-        };
+        btn.dataset.value = 'enter';                      // <-- ADICIONADO
+        btn.addEventListener('click', () => { if (activeMode !== 'keyboard') return; processarTecla('enter'); resetSelection(); });
         container.appendChild(btn);
         botoesTeclado.push({ el: btn, type: 'special', value: 'enter', index });
         window.__kb_specials[btn.id] = btn;
@@ -1045,10 +1002,10 @@ function criarTeclado() {
         btn.textContent = formatarLabel(item);
         btn.dataset.value = (typeof item === 'string') ? item : '';
         if (especiais.includes(item)) btn.classList.add('key-special');
-        btn.onclick = () => { 
-          if (activeMode !== 'keyboard') return; 
-          processarTecla(item); 
-          resetSelection(); 
+        btn.onclick = () => {
+          if (activeMode !== 'keyboard') return;
+          processarTecla(item);
+          resetSelection();
         };
         container.appendChild(btn);
         botoesTeclado.push({ el: btn, type: 'simple', value: item, index });
@@ -1062,10 +1019,10 @@ function criarTeclado() {
   spaceRow.dataset.value = 'space';
   spaceRow._item = 'space';
   spaceRow.innerHTML = getIconHTML('spacebar');
-  spaceRow.onclick = () => { 
-    if (activeMode !== 'keyboard') return; 
-    processarTecla('space'); 
-    resetSelection(); 
+  spaceRow.onclick = () => {
+    if (activeMode !== 'keyboard') return;
+    processarTecla('space');
+    resetSelection();
   };
   container.appendChild(spaceRow);
   botoesTeclado.push({ el: spaceRow, type: 'space', value: 'space', index: botoesTeclado.length });
@@ -1592,88 +1549,161 @@ function selecionarTeclaAtual() {
 
   if (activeMode === 'toolbar') {
     const sel = botoesToolbar.find(b => b.classList.contains('row-selected') || b.classList.contains('selected'));
-    if (sel) {
-      sel.click();
-      return;
-    } else {
-      startToolbarCycle();
-    }
+    if (sel) { sel.click(); return; } else { startToolbarCycle(); }
     return;
   }
 
   if (activeMode === 'controls') {
     if (!selectingColumn) {
-      if (window.__kb_debug) console.log('[KB] selecionarTeclaAtual -> entering controls column cycle');
       startControlsColumnCycle();
       return;
     }
-
     const selBtn = getCurrentlySelectedControlButton();
     if (selBtn) {
       try { selBtn.click(); } catch (e) { }
-      if (window.__kb_debug) console.log('[KB] selecionarTeclaAtual -> controls button clicked');
     }
     resetSelection();
     return;
   }
 
+  // keyboard / numpad
   if (!selectingColumn) {
     const foundSpace = botoesTeclado.find(entry => {
       const { node } = normalizeEntry(entry);
       return node && node.classList && node.classList.contains('row-selected') && node.classList.contains('space-row');
     });
     if (foundSpace) {
-      if (window.__kb_debug) console.log('[KB] selecionarTeclaAtual -> space-row selected');
       processarTecla('space');
       resetSelection();
       return;
     }
-    if (window.__kb_debug) console.log('[KB] selecionarTeclaAtual -> starting column cycle');
     startColumnCycle();
     return;
   }
 
+  // estamos na fase de coluna -> pega o item selecionado
   const selItem = getCurrentlySelectedItemKeyboard();
-  if (window.__kb_debug) console.log('[KB] selecionarTeclaAtual -> resolving selItem:', selItem);
-  if (selItem !== undefined) {
-    if (typeof selItem === 'object' && selItem.type === 'action') processarTecla(selItem);
-    else if (typeof selItem === 'object' && selItem.type === 'special' && selItem.char === 'enter') processarTecla('enter');
-    else processarTecla(selItem);
+  console.log('[KB] selecionarTeclaAtual -> resolving selItem:', selItem);
+
+  // fallback: quando selItem vazio/undefined, inspeciona DOM diretamente
+  if (selItem === undefined || selItem === '' || selItem === null) {
+    const kbRoot = document.getElementById('keyboard');
+    if (kbRoot) {
+      // tenta elemento com .selected primeiro
+      let el = kbRoot.querySelector('.selected, .row-selected');
+      if (!el) {
+        // fallback: elemento na linha corrente
+        el = kbRoot.querySelector('.row-selected .selected, .row-selected');
+      }
+      if (el) {
+        // tenta inferir ação por dataset
+        if (el.dataset && el.dataset.action) {
+          processarTecla({ type: 'action', action: el.dataset.action, icon: el.dataset.icon || null });
+          resetSelection();
+          return;
+        }
+        if (el.dataset && el.dataset.value === 'enter') {
+          processarTecla('enter');
+          resetSelection();
+          return;
+        }
+        if (el.dataset && el.dataset.value === 'space') {
+          processarTecla('space');
+          resetSelection();
+          return;
+        }
+        // se for half-btn com alias
+        const aid = el.getAttribute && el.getAttribute('data-alias-id');
+        if (aid && window.__kb_specials_aliases && window.__kb_specials_aliases[aid]) {
+          const ali = window.__kb_specials_aliases[aid];
+          // ali pode ser elemento com dataset.action
+          if (ali.dataset && ali.dataset.action) {
+            processarTecla({ type: 'action', action: ali.dataset.action, icon: ali.dataset.icon || null });
+            resetSelection();
+            return;
+          }
+        }
+        // se elemento tem click handler (botão de letra), simula click
+        try { el.click(); resetSelection(); return; } catch (e) { /* continue */ }
+      }
+    }
+    // última tentativa: se numpad, delega
+    if (activeMode === 'numpad') {
+      selecionarTeclaNumpadAtual();
+      return;
+    }
+    resetSelection();
+    return;
   }
+
+  // se temos selItem válido, processa
+  if (typeof selItem === 'object' && selItem.type === 'action') processarTecla(selItem);
+  else if (typeof selItem === 'object' && selItem.type === 'special' && selItem.char === 'enter') processarTecla('enter');
+  else processarTecla(selItem);
 
   resetSelection();
 }
 
 function getCurrentlySelectedItemKeyboard() {
+  // Varre botões conhecidos (modelo) procurando por .selected
   for (let i = 0; i < botoesTeclado.length; i++) {
     const entry = botoesTeclado[i];
     const { node, meta } = normalizeEntry(entry);
     if (!node) continue;
 
+    // compound cells (half-btns)
     if (node.classList && node.classList.contains('compound-cell')) {
       const halves = (meta && meta.halves && Array.isArray(meta.halves)) ? meta.halves : Array.from(node.querySelectorAll('.half-btn'));
       for (let h = 0; h < halves.length; h++) {
-        if (halves[h].classList.contains('selected')) {
-          if (halves[h]._numpadAction) return halves[h]._numpadAction;
-          if (halves[h].dataset.action) {
-            return { type: 'action', action: halves[h].dataset.action, icon: halves[h].dataset.icon };
+        const half = halves[h];
+        if (half.classList.contains('selected')) {
+          // prioriza objetos internos (_numpadAction)
+          if (half._numpadAction) return half._numpadAction;
+          if (half.dataset && half.dataset.action) return { type: 'action', action: half.dataset.action, icon: half.dataset.icon || null };
+          if (half.dataset && half.dataset.value === 'enter') return 'enter';
+          if (half.dataset && half.dataset.value === 'space') return 'space';
+          if (half.dataset && half.dataset.value === 'caps') return 'caps';
+          // fallback para texto
+          const txt = (half.textContent || '').trim();
+          if (txt) return txt;
+          // tenta alias
+          const aid = half.getAttribute && half.getAttribute('data-alias-id');
+          if (aid && window.__kb_specials_aliases && window.__kb_specials_aliases[aid]) {
+            const ali = window.__kb_specials_aliases[aid];
+            if (ali.dataset && ali.dataset.action) return { type: 'action', action: ali.dataset.action, icon: ali.dataset.icon || null };
           }
-          if (halves[h].dataset.value === 'enter') return 'enter';
-          if (halves[h].dataset.value === 'space') return 'space';
-          if (halves[h].dataset.value === 'caps') return 'caps';
-          return halves[h].textContent;
+          return undefined;
         }
       }
     }
 
+    // Se nó está marcado como selecionado
     if (node.classList && node.classList.contains('selected')) {
+      // espaço
       if (node.classList.contains('space-row')) return 'space';
+      // numpad
       if (node.classList.contains('num-btn')) return (meta && meta.value) || node.textContent;
-      if (meta && (meta.type === 'simple' || meta.type === 'special' || meta.type === 'action')) return meta.value;
-      return node.textContent;
+      // meta.value (for simple/special/action entries)
+      if (meta && (meta.type === 'simple' || meta.type === 'special' || meta.type === 'action')) {
+        // se for action com objeto, devolve objeto
+        if (meta.type === 'action' && meta.value) return meta.value;
+        if (meta.value) return meta.value;
+      }
+      // se elemento tiver dataset.action (icon buttons)
+      if (node.dataset && node.dataset.action) return { type: 'action', action: node.dataset.action, icon: node.dataset.icon || null };
+      if (node.dataset && node.dataset.value === 'enter') return 'enter';
+      const txt = (node.textContent || '').trim();
+      if (txt) return txt;
+      const aid = node.getAttribute && node.getAttribute('data-alias-id');
+      if (aid && window.__kb_specials_aliases && window.__kb_specials_aliases[aid]) {
+        const ali = window.__kb_specials_aliases[aid];
+        if (ali.dataset && ali.dataset.action) return { type: 'action', action: ali.dataset.action, icon: ali.dataset.icon || null };
+      }
+      return undefined;
     }
   }
 
+  // se nada em .selected -> procura por .row-selected (linha)
   for (let i = 0; i < botoesTeclado.length; i++) {
     const entry = botoesTeclado[i];
     const { node, meta } = normalizeEntry(entry);
@@ -1683,7 +1713,15 @@ function getCurrentlySelectedItemKeyboard() {
       if (node.classList.contains('space-row')) return 'space';
       if (node.classList.contains('num-btn')) return (meta && meta.value) || node.textContent;
       if (meta && (meta.type === 'simple' || meta.type === 'special' || meta.type === 'action')) return meta.value;
-      return node.textContent;
+      const txt = (node.textContent || '').trim();
+      if (txt) return txt;
+      if (node.dataset && node.dataset.action) return { type: 'action', action: node.dataset.action, icon: node.dataset.icon || null };
+      const aid = node.getAttribute && node.getAttribute('data-alias-id');
+      if (aid && window.__kb_specials_aliases && window.__kb_specials_aliases[aid]) {
+        const ali = window.__kb_specials_aliases[aid];
+        if (ali.dataset && ali.dataset.action) return { type: 'action', action: ali.dataset.action, icon: ali.dataset.icon || null };
+      }
+      return undefined;
     }
   }
 
