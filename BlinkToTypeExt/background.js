@@ -8,87 +8,126 @@ chrome.runtime.onStartup.addListener(() => {
   console.log('sw start');
 });
 
-// ========== PERSISTÊNCIA DE ESTADO ==========
+// ----------------------
+// Storage helpers (promisified)
+// ----------------------
+function storageGet(keyOrKeys) {
+  return new Promise((resolve, reject) => {
+    try {
+      chrome.storage.local.get(keyOrKeys, (result) => {
+        if (chrome.runtime.lastError) return reject(chrome.runtime.lastError);
+        resolve(result);
+      });
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+function storageSet(obj) {
+  return new Promise((resolve, reject) => {
+    try {
+      chrome.storage.local.set(obj, () => {
+        if (chrome.runtime.lastError) return reject(chrome.runtime.lastError);
+        resolve();
+      });
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+// ----------------------
+// KEYS / PERSISTÊNCIA
+// ----------------------
 const STATE_KEY = 'blink_extension_state';
-const ACTIVE_TABS_KEY = 'blink_active_tabs'; // Rastreia abas onde extensão está ativa
+const ACTIVE_TABS_KEY = 'blink_active_tabs';
+const CAMERA_PREF_KEY = 'blink_camera_prefs'; // object { "<tabId>": true/false }
 
-// Salva estado
-async function saveState(state) {
+/** grava preferência de câmera para uma aba */
+async function saveCameraPreferenceForTab(tabId, enabled) {
   try {
-    await chrome.storage.local.set({ [STATE_KEY]: state });
-    console.log('[Background] Estado salvo:', state);
+    const result = await storageGet(CAMERA_PREF_KEY);
+    const prefs = result[CAMERA_PREF_KEY] || {};
+    prefs[String(tabId)] = !!enabled;
+    await storageSet({ [CAMERA_PREF_KEY]: prefs });
+    console.log('[Background] saved camera pref for tab', tabId, enabled);
   } catch (err) {
-    console.error('[Background] Erro ao salvar estado:', err);
+    console.warn('[Background] saveCameraPreferenceForTab error', err);
+    throw err;
   }
 }
 
-// Carrega estado
-async function loadState() {
+/** lê preferência */
+async function getCameraPrefForTab(tabId) {
   try {
-    const result = await chrome.storage.local.get(STATE_KEY);
-    return result[STATE_KEY] || null;
+    const result = await storageGet(CAMERA_PREF_KEY);
+    const prefs = result[CAMERA_PREF_KEY] || {};
+    return !!prefs[String(tabId)];
   } catch (err) {
-    console.error('[Background] Erro ao carregar estado:', err);
-    return null;
-  }
-}
-
-// Marca aba como ativa
-async function markTabActive(tabId) {
-  try {
-    const result = await chrome.storage.local.get(ACTIVE_TABS_KEY);
-    const activeTabs = result[ACTIVE_TABS_KEY] || {};
-    activeTabs[tabId] = Date.now();
-    await chrome.storage.local.set({ [ACTIVE_TABS_KEY]: activeTabs });
-    console.log('[Background] Aba marcada como ativa:', tabId);
-  } catch (err) {
-    console.error('[Background] Erro ao marcar aba:', err);
-  }
-}
-
-// Verifica se aba está ativa
-async function isTabActive(tabId) {
-  try {
-    const result = await chrome.storage.local.get(ACTIVE_TABS_KEY);
-    const activeTabs = result[ACTIVE_TABS_KEY] || {};
-    return !!activeTabs[tabId];
-  } catch (err) {
+    console.warn('[Background] getCameraPrefForTab error', err);
     return false;
   }
 }
 
-// Remove aba do rastreamento
-async function removeTabFromActive(tabId) {
+/** marca aba ativa */
+async function markTabActive(tabId) {
   try {
-    const result = await chrome.storage.local.get(ACTIVE_TABS_KEY);
+    const result = await storageGet(ACTIVE_TABS_KEY);
     const activeTabs = result[ACTIVE_TABS_KEY] || {};
-    delete activeTabs[tabId];
-    await chrome.storage.local.set({ [ACTIVE_TABS_KEY]: activeTabs });
-    console.log('[Background] Aba removida do rastreamento:', tabId);
+    activeTabs[String(tabId)] = Date.now();
+    await storageSet({ [ACTIVE_TABS_KEY]: activeTabs });
+    console.log('[Background] Aba marcada como ativa:', tabId);
   } catch (err) {
-    console.error('[Background] Erro ao remover aba:', err);
+    console.error('[Background] Erro ao marcar aba:', err);
+    throw err;
   }
 }
 
-// Função auxiliar para verificar se pode injetar
+/** checa se aba está ativa */
+async function isTabActive(tabId) {
+  try {
+    const result = await storageGet(ACTIVE_TABS_KEY);
+    const activeTabs = result[ACTIVE_TABS_KEY] || {};
+    return !!activeTabs[String(tabId)];
+  } catch (err) {
+    console.warn('[Background] isTabActive error', err);
+    return false;
+  }
+}
+
+/** remove do rastreamento */
+async function removeTabFromActive(tabId) {
+  try {
+    const result = await storageGet(ACTIVE_TABS_KEY);
+    const activeTabs = result[ACTIVE_TABS_KEY] || {};
+    delete activeTabs[String(tabId)];
+    await storageSet({ [ACTIVE_TABS_KEY]: activeTabs });
+    console.log('[Background] Aba removida do rastreamento:', tabId);
+  } catch (err) {
+    console.error('[Background] Erro ao remover aba:', err);
+    throw err;
+  }
+}
+
+// ----------------------
+// HELPERS DE INJEÇÃO / CAN INJECT
+// ----------------------
 function canInjectInTab(tab) {
   if (!tab || !tab.url) return false;
   const url = tab.url;
-  
   // URLs onde não pode injetar (restrições de segurança do Chrome)
-  if (url.startsWith('chrome://') || 
-      url.startsWith('edge://') || 
+  if (url.startsWith('chrome://') ||
+      url.startsWith('edge://') ||
       url.startsWith('about:') ||
       url.startsWith('chrome-extension://') ||
       url === 'chrome://newtab/' ||
       url.includes('chrome.google.com/webstore')) {
     return false;
   }
-  
   return true;
 }
 
-// Função para verificar se extensão já está injetada
 async function isExtensionInjected(tabId) {
   try {
     const results = await chrome.scripting.executeScript({
@@ -101,7 +140,7 @@ async function isExtensionInjected(tabId) {
   }
 }
 
-// Função para injetar extensão com retry
+/** injeta extensão e, se pref de câmera estiver salva, dispara start-camera */
 async function injectExtension(tabId, retries = 3) {
   for (let i = 0; i < retries; i++) {
     try {
@@ -111,44 +150,158 @@ async function injectExtension(tabId, retries = 3) {
       });
       console.log('[Background] ✅ Extensão injetada na aba:', tabId);
       await markTabActive(tabId);
+
+      // após injeção, checar preferência e pedir pra iniciar a câmera se necessário
+      try {
+        const shouldBeOn = await getCameraPrefForTab(tabId);
+        if (shouldBeOn) {
+          // tenta enviar comando (a função tem retry interno)
+          setTimeout(() => {
+            sendCommandToIframe(tabId, { type: 'blink:command', command: 'start-camera' });
+          }, 350);
+        }
+      } catch (e) {
+        console.warn('[Background] erro ao decidir iniciar camera após injeção', e);
+      }
+
       return true;
     } catch (err) {
-      console.warn(`[Background] Tentativa ${i + 1}/${retries} falhou:`, err.message);
-      if (i < retries - 1) {
-        await new Promise(resolve => setTimeout(resolve, 500));
-      }
+      console.warn(`[Background] Tentativa ${i + 1}/${retries} falhou:`, err && err.message);
+      if (i < retries - 1) await new Promise(r => setTimeout(r, 500));
     }
   }
   console.error('[Background] ❌ Falha ao injetar após', retries, 'tentativas');
   return false;
 }
 
-// ========== MONITORAMENTO DE NAVEGAÇÃO ==========
-// Monitora quando a página completa o carregamento
+/** Envia comando para iframe dentro da página (tenta várias vezes até o iframe existir) */
+async function sendCommandToIframe(tabId, commandObj = { type: 'blink:command', command: 'start-camera' }, attempts = 6, delayMs = 300) {
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const results = await chrome.scripting.executeScript({
+        target: { tabId },
+        func: (msg) => {
+          try {
+            const iframe = document.getElementById('blink-extension-iframe');
+            if (iframe && iframe.contentWindow) {
+              iframe.contentWindow.postMessage(msg, '*');
+              return { ok: true };
+            }
+            return { ok: false, reason: 'no-iframe' };
+          } catch (e) {
+            return { ok: false, reason: 'exception' };
+          }
+        },
+        args: [commandObj]
+      });
+
+      if (results && results[0] && results[0].result && results[0].result.ok) {
+        console.log('[Background] enviado comando para iframe em tab', tabId, commandObj);
+        return true;
+      } else {
+        // espera e tenta novamente
+        await new Promise(r => setTimeout(r, delayMs));
+      }
+    } catch (err) {
+      console.warn('[Background] falha ao enviar comando para iframe (tentativa):', err && err.message);
+      await new Promise(r => setTimeout(r, delayMs));
+    }
+  }
+  console.warn('[Background] não conseguiu enviar comando ao iframe após tentativas:', tabId, commandObj);
+  return false;
+}
+
+// ----------------------
+// PERSISTÊNCIA DE ESTADO (salvar/carregar)
+// ----------------------
+async function saveState(state) {
+  try {
+    await storageSet({ [STATE_KEY]: state });
+    console.log('[Background] Estado salvo:', state);
+  } catch (err) {
+    console.error('[Background] Erro ao salvar estado:', err);
+    throw err;
+  }
+}
+
+async function loadState() {
+  try {
+    const result = await storageGet(STATE_KEY);
+    return result[STATE_KEY] || null;
+  } catch (err) {
+    console.error('[Background] Erro ao carregar estado:', err);
+    return null;
+  }
+}
+
+// ----------------------
+// MONITORAMENTO DE NAVEGAÇÃO (SPA/history + reloads)
+// ----------------------
+// onHistoryStateUpdated (SPA navigation) - registramos uma vez
+if (chrome.webNavigation && chrome.webNavigation.onHistoryStateUpdated) {
+  chrome.webNavigation.onHistoryStateUpdated.addListener(async (details) => {
+    try {
+      const tabId = details.tabId;
+      if (!tabId) return;
+      const wasActive = await isTabActive(tabId);
+      if (!wasActive) return;
+
+      console.log('[Background] onHistoryStateUpdated para aba ativa:', tabId, details.url);
+
+      // Re-checa se podemos injetar
+      const tab = await new Promise(resolve => chrome.tabs.get(tabId, (t) => resolve(t)));
+      if (!tab || !canInjectInTab(tab)) {
+        await removeTabFromActive(tabId);
+        return;
+      }
+
+      // Verifica se o overlay ainda existe; se não, força reinjeção
+      const alreadyInjected = await isExtensionInjected(tabId);
+      if (!alreadyInjected) {
+        console.log('[Background] Reinjetando devido a history state update...');
+        await injectExtension(tabId);
+      } else {
+        // Se já injetado, apenas (re)envia start-camera conforme preferência
+        const shouldBeOn = await getCameraPrefForTab(tabId);
+        if (shouldBeOn) {
+          setTimeout(() => sendCommandToIframe(tabId, { type: 'blink:command', command: 'start-camera' }), 350);
+        }
+      }
+    } catch (err) {
+      console.warn('[Background] onHistoryStateUpdated error', err);
+    }
+  });
+}
+
+// tabs.onUpdated (full navigation / reload)
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
-  // Só age quando a página terminou de carregar
   if (changeInfo.status === 'complete') {
-    // Verifica se esta aba estava ativa
     const wasActive = await isTabActive(tabId);
-    
+
     if (wasActive) {
       console.log('[Background] 🔄 Página recarregada/navegada na aba ativa:', tabId, tab.url);
-      
-      // Verifica se pode injetar na nova URL
+
       if (!canInjectInTab(tab)) {
         console.warn('[Background] ⚠️ Não pode injetar na URL:', tab.url);
         await removeTabFromActive(tabId);
         return;
       }
 
-      // Verifica se já está injetada
       const alreadyInjected = await isExtensionInjected(tabId);
-      
+
       if (!alreadyInjected) {
         console.log('[Background] 🔧 Reinjetando extensão...');
         await injectExtension(tabId);
       } else {
         console.log('[Background] ✅ Extensão já presente');
+      }
+
+      // checa preferência da câmera e tenta iniciar
+      const shouldBeOn = await getCameraPrefForTab(tabId);
+      if (shouldBeOn) {
+        setTimeout(() => {
+          sendCommandToIframe(tabId, { type: 'blink:command', command: 'start-camera' });
+        }, 450);
       }
     }
   }
@@ -159,7 +312,9 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
   await removeTabFromActive(tabId);
 });
 
-// Gerenciamento do clique no ícone da extensão
+// ----------------------
+// CLIQUE NO ÍCONE (toggle overlay / inject)
+// ----------------------
 chrome.action.onClicked.addListener(async (tab) => {
   try {
     if (!tab || !tab.id || !tab.url) {
@@ -167,12 +322,9 @@ chrome.action.onClicked.addListener(async (tab) => {
       return;
     }
 
-    // Verifica se pode injetar
     if (!canInjectInTab(tab)) {
       console.warn('[Blink] tentativa de injeção em URL não permitida:', tab.url);
-      // Tenta criar uma nova aba com Google
       chrome.tabs.create({ url: 'https://www.google.com', active: true }, async (newTab) => {
-        // Aguarda carregar
         chrome.tabs.onUpdated.addListener(function listener(tId, info) {
           if (tId === newTab.id && info.status === 'complete') {
             chrome.tabs.onUpdated.removeListener(listener);
@@ -185,12 +337,10 @@ chrome.action.onClicked.addListener(async (tab) => {
 
     console.log(`[Blink] tentando injetar overlay em tab ${tab.id} ${tab.url}`);
 
-    // Verifica se já está injetada
     const alreadyInjected = await isExtensionInjected(tab.id);
-    
+
     if (alreadyInjected) {
       console.log('[Blink] Extensão já injetada, removendo...');
-      // Remove se já estiver injetada (toggle)
       await chrome.scripting.executeScript({
         target: { tabId: tab.id },
         func: () => {
@@ -200,7 +350,6 @@ chrome.action.onClicked.addListener(async (tab) => {
       });
       await removeTabFromActive(tab.id);
     } else {
-      // Injeta
       await injectExtension(tab.id);
     }
   } catch (err) {
@@ -208,34 +357,59 @@ chrome.action.onClicked.addListener(async (tab) => {
   }
 });
 
-// ========== MENSAGENS ==========
+// ----------------------
+// MENSAGENS (API para content / iframe / ui)
+// ----------------------
+// ========== MENSAGENS (CORRIGIDO) ==========
 chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
-  if (!msg || !msg.type) return;
+  if (!msg || !msg.type) return false; // ✅ CRÍTICO: return false
 
   console.log('[Background] Mensagem recebida:', msg.type, msg);
 
+  // save-state
   if (msg.type === 'save-state') {
-    saveState(msg.state).then(() => sendResp({ ok: true }));
-    return true;
+    (async () => {
+      try {
+        await saveState(msg.state);
+        sendResp({ ok: true });
+      } catch (err) {
+        console.error('[Background] save-state error', err);
+        sendResp({ ok: false, error: err?.message });
+      }
+    })();
+    return true; // ✅ mantém canal aberto
   }
 
+  // load-state
   if (msg.type === 'load-state') {
-    loadState().then(state => sendResp({ ok: true, state }));
+    (async () => {
+      try {
+        const state = await loadState();
+        sendResp({ ok: true, state });
+      } catch (err) {
+        console.error('[Background] load-state error', err);
+        sendResp({ ok: false, error: err?.message });
+      }
+    })();
     return true;
   }
 
-  // Marca aba como ativa (chamado quando extensão é aberta)
+  // extension-opened
   if (msg.type === 'extension-opened') {
-    const tabId = sender.tab && sender.tab.id;
+    const tabId = sender.tab?.id;
     if (tabId) {
-      markTabActive(tabId).then(() => sendResp({ ok: true }));
+      markTabActive(tabId)
+        .then(() => sendResp({ ok: true }))
+        .catch(() => sendResp({ ok: false }));
       return true;
     }
+    sendResp({ ok: false, error: 'no-tab' });
+    return false; // ✅ não precisa manter aberto
   }
 
-  // Remove extensão e desmarca aba
+  // remove-overlay
   if (msg.type === 'remove-overlay') {
-    const tabId = sender.tab && sender.tab.id;
+    const tabId = sender.tab?.id;
     if (tabId) {
       chrome.scripting.executeScript({
         target: { tabId },
@@ -243,64 +417,114 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
           const root = document.getElementById('blink-extension-root');
           if (root) root.remove();
         }
-      }).then(() => {
-        removeTabFromActive(tabId);
-        sendResp({ ok: true });
-      }).catch(() => sendResp({ ok: false }));
+      })
+        .then(() => removeTabFromActive(tabId))
+        .then(() => sendResp({ ok: true }))
+        .catch(() => sendResp({ ok: false }));
       return true;
     }
+    sendResp({ ok: false });
+    return false;
   }
 
-  // Abrir nova aba
+  // set-camera-pref
+  if (msg.type === 'set-camera-pref') {
+    (async () => {
+      const { tabId: explicitTabId, enabled } = msg;
+      const tId = explicitTabId || sender.tab?.id;
+      if (!tId) {
+        sendResp({ ok: false, error: 'no-tab-id' });
+        return;
+      }
+      try {
+        await saveCameraPreferenceForTab(tId, !!enabled);
+        if (enabled) {
+          setTimeout(() => {
+            sendCommandToIframe(tId, { 
+              type: 'blink:command', 
+              command: 'start-camera' 
+            });
+          }, 300);
+        }
+        sendResp({ ok: true });
+      } catch (err) {
+        console.error('[Background] set-camera-pref error', err);
+        sendResp({ ok: false, error: err?.message });
+      }
+    })();
+    return true;
+  }
+
+  // open-new-tab
   if (msg.type === 'open-new-tab') {
     chrome.tabs.create({
       url: msg.url || 'https://www.google.com',
       active: true
     }).then(tab => {
       console.log('[Background] Nova aba criada:', tab.id);
-
-      chrome.tabs.onUpdated.addListener(function listener(tabId, info) {
+      
+      const listener = (tabId, info) => {
         if (tabId === tab.id && info.status === 'complete') {
           chrome.tabs.onUpdated.removeListener(listener);
-          injectExtension(tab.id).then(() => {
-            sendResp({ ok: true, tabId: tab.id });
-          });
+          injectExtension(tab.id)
+            .then(() => sendResp({ ok: true, tabId: tab.id }))
+            .catch(err => sendResp({ ok: false, error: err?.message }));
         }
-      });
+      };
+      
+      chrome.tabs.onUpdated.addListener(listener);
     }).catch(err => {
       console.error('[Background] Erro ao criar aba:', err);
-      sendResp({ ok: false, error: err.message });
+      sendResp({ ok: false, error: err?.message });
     });
     return true;
   }
 
-  // Navegar para aba anterior (esquerda)
-  if (msg.type === 'tab-previous') {
-    chrome.tabs.query({ currentWindow: true }, async (tabs) => {
-      if (tabs.length <= 1) {
-        sendResp({ ok: false, message: 'Apenas uma aba aberta' });
-        return;
-      }
-
-      chrome.tabs.query({ active: true, currentWindow: true }, async (activeTabs) => {
-        const currentTab = activeTabs[0];
-        const currentIndex = tabs.findIndex(t => t.id === currentTab.id);
-        const prevIndex = currentIndex > 0 ? currentIndex - 1 : tabs.length - 1;
-        const prevTab = tabs[prevIndex];
-
-        if (!canInjectInTab(prevTab)) {
-          console.warn('[Background] Não pode injetar na aba:', prevTab.url);
-          sendResp({ ok: false, message: 'Extensão não pode ser executada nesta página' });
+  // tab-previous / tab-next
+  if (msg.type === 'tab-previous' || msg.type === 'tab-next') {
+    (async () => {
+      try {
+        const tabs = await new Promise(r => 
+          chrome.tabs.query({ currentWindow: true }, r)
+        );
+        
+        if (tabs.length <= 1) {
+          sendResp({ ok: false, message: 'Apenas uma aba aberta' });
           return;
         }
 
-        await chrome.tabs.update(prevTab.id, { active: true });
-        console.log('[Background] Mudou para aba anterior:', prevTab.id);
+        const activeTabs = await new Promise(r => 
+          chrome.tabs.query({ active: true, currentWindow: true }, r)
+        );
+        
+        const currentTab = activeTabs[0];
+        const currentIndex = tabs.findIndex(t => t.id === currentTab.id);
+        
+        let targetIndex;
+        if (msg.type === 'tab-previous') {
+          targetIndex = currentIndex > 0 ? currentIndex - 1 : tabs.length - 1;
+        } else {
+          targetIndex = currentIndex < tabs.length - 1 ? currentIndex + 1 : 0;
+        }
+        
+        const targetTab = tabs[targetIndex];
 
-        if (prevTab.status !== 'complete') {
+        if (!canInjectInTab(targetTab)) {
+          sendResp({ 
+            ok: false, 
+            message: 'Extensão não pode ser executada nesta página' 
+          });
+          return;
+        }
+
+        await new Promise(r => 
+          chrome.tabs.update(targetTab.id, { active: true }, r)
+        );
+
+        if (targetTab.status !== 'complete') {
           await new Promise(resolve => {
             const listener = (tabId, info) => {
-              if (tabId === prevTab.id && info.status === 'complete') {
+              if (tabId === targetTab.id && info.status === 'complete') {
                 chrome.tabs.onUpdated.removeListener(listener);
                 resolve();
               }
@@ -309,76 +533,30 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
           });
         }
 
-        const alreadyInjected = await isExtensionInjected(prevTab.id);
+        const injected = await isExtensionInjected(targetTab.id);
+        if (!injected) await injectExtension(targetTab.id);
         
-        if (!alreadyInjected) {
-          await injectExtension(prevTab.id);
-        }
-
-        sendResp({ ok: true, tabId: prevTab.id });
-      });
-    });
-    return true;
-  }
-
-  // Navegar para próxima aba (direita)
-  if (msg.type === 'tab-next') {
-    chrome.tabs.query({ currentWindow: true }, async (tabs) => {
-      if (tabs.length <= 1) {
-        sendResp({ ok: false, message: 'Apenas uma aba aberta' });
-        return;
+        sendResp({ ok: true, tabId: targetTab.id });
+      } catch (err) {
+        console.error('[Background] tab navigation error', err);
+        sendResp({ ok: false, error: err?.message });
       }
-
-      chrome.tabs.query({ active: true, currentWindow: true }, async (activeTabs) => {
-        const currentTab = activeTabs[0];
-        const currentIndex = tabs.findIndex(t => t.id === currentTab.id);
-        const nextIndex = currentIndex < tabs.length - 1 ? currentIndex + 1 : 0;
-        const nextTab = tabs[nextIndex];
-
-        if (!canInjectInTab(nextTab)) {
-          console.warn('[Background] Não pode injetar na aba:', nextTab.url);
-          sendResp({ ok: false, message: 'Extensão não pode ser executada nesta página' });
-          return;
-        }
-
-        await chrome.tabs.update(nextTab.id, { active: true });
-        console.log('[Background] Mudou para próxima aba:', nextTab.id);
-
-        if (nextTab.status !== 'complete') {
-          await new Promise(resolve => {
-            const listener = (tabId, info) => {
-              if (tabId === nextTab.id && info.status === 'complete') {
-                chrome.tabs.onUpdated.removeListener(listener);
-                resolve();
-              }
-            };
-            chrome.tabs.onUpdated.addListener(listener);
-          });
-        }
-
-        const alreadyInjected = await isExtensionInjected(nextTab.id);
-        
-        if (!alreadyInjected) {
-          await injectExtension(nextTab.id);
-        }
-
-        sendResp({ ok: true, tabId: nextTab.id });
-      });
-    });
+    })();
     return true;
   }
 
-  // Fechar aba atual
+  // close-current-tab
   if (msg.type === 'close-current-tab') {
     chrome.tabs.query({ currentWindow: true }, (tabs) => {
       if (tabs.length <= 1) {
         sendResp({ ok: false, message: 'Não pode fechar a última aba' });
         return;
       }
-
+      
       chrome.tabs.query({ active: true, currentWindow: true }, async (activeTabs) => {
         const currentTab = activeTabs[0];
         await removeTabFromActive(currentTab.id);
+        
         chrome.tabs.remove(currentTab.id, () => {
           console.log('[Background] Aba fechada:', currentTab.id);
           sendResp({ ok: true });
@@ -387,4 +565,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
     });
     return true;
   }
+
+  // ✅ Retorna false se não reconheceu a mensagem
+  return false;
 });

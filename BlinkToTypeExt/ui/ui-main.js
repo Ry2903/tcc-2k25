@@ -10,14 +10,27 @@
   const BTN_START_ID = 'btn-start';
   const BTN_CLOSE_ID = 'btn-close';
 
-  let blinkDetectionReady = false; // Flag para saber se detecção já foi configurada
+  let blinkDetectionReady = false;
 
   function $id(id) { return document.getElementById(id); }
 
-  // ========== GERENCIAMENTO DE TELAS ==========
+  function hideElementSafely(el) {
+    try {
+      if (!el) return;
+      const active = document.activeElement;
+      if (active && el.contains(active)) {
+        try { if (typeof active.blur === 'function') active.blur(); } catch (e) { }
+        try { if (document.body && typeof document.body.focus === 'function') document.body.focus(); } catch (e) { }
+      }
+      el.classList.add('hidden');
+      el.setAttribute('aria-hidden', 'true');
+    } catch (err) {
+      console.warn('hideElementSafely error', err);
+    }
+  }
+
   function showWelcome() {
     LOG('📱 Mostrando welcome');
-    // esconde outros painéis de forma segura
     [$id(MAIN_ID), $id(CAMERA_SETUP_ID)].forEach(el => { if (el) hideElementSafely(el); });
     const w = $id(WELCOME_ID);
     if (w) {
@@ -40,21 +53,93 @@
 
   function hideCameraSetup() {
     const cs = $id(CAMERA_SETUP_ID);
-    if (cs) {
-      hideElementSafely(cs);
-    }
+    if (cs) hideElementSafely(cs);
     showMain();
   }
 
-  // ========== CRIAR TELA DE CÂMERA ==========
+  // ========== LISTENER DE COMANDOS (CORRIGIDO) ==========
+  function setupCommandListener() {
+    if (window.__ui_postmsg_registered) return; // Já registrado
+
+    window.addEventListener('message', (ev) => {
+      if (!ev?.data) return;
+
+      const d = ev.data;
+
+      if (d.type === 'blink:command') {
+        // Executa async sem bloquear
+        (async () => {
+          try {
+            if (d.command === 'start-camera') {
+              LOG('📸 Comando: start-camera recebido');
+
+              const startBtn = document.getElementById('start-camera');
+              if (startBtn && !startBtn.disabled) {
+                startBtn.click();
+
+                // Aguarda BlinkDetection estar pronto
+                const maxWait = 4000;
+                const startTime = Date.now();
+
+                while (Date.now() - startTime < maxWait) {
+                  if (window.BlinkDetection?.isRunning || blinkDetectionReady) {
+                    LOG('✅ BlinkDetection pronto');
+
+                    // Inicia detecção automática
+                    setTimeout(() => {
+                      if (typeof window.iniciarDeteccaoAutomatica === 'function') {
+                        window.iniciarDeteccaoAutomatica().catch(e =>
+                          LOG('⚠️ iniciarDeteccaoAutomatica falhou:', e)
+                        );
+                      } else {
+                        if (window.setActivePanel) window.setActivePanel('keyboard');
+                        if (window.resetSelection) window.resetSelection();
+                      }
+                    }, 200);
+
+                    break;
+                  }
+                  await new Promise(r => setTimeout(r, 200));
+                }
+              } else {
+                // Fallback: API direta
+                if (window.BlinkDetection?.init) {
+                  await window.BlinkDetection.init();
+                  await window.BlinkDetection.startCamera();
+                  blinkDetectionReady = true;
+
+                  if (typeof window.iniciarDeteccaoAutomatica === 'function') {
+                    await window.iniciarDeteccaoAutomatica();
+                  }
+                }
+              }
+            } else if (d.command === 'stop-camera') {
+              LOG('⏹️ Comando: stop-camera recebido');
+
+              const stopBtn = document.getElementById('stop-camera');
+              if (stopBtn) {
+                stopBtn.click();
+              } else if (window.BlinkDetection?.stop) {
+                window.BlinkDetection.stop();
+                blinkDetectionReady = false;
+              }
+            }
+          } catch (err) {
+            LOG('⚠️ Erro ao processar comando:', err);
+          }
+        })();
+      }
+    });
+
+    window.__ui_postmsg_registered = true;
+    LOG('✅ Listener de comandos registrado');
+  }
+
   function createCameraSetup() {
     LOG('📸 Criando tela de câmera');
 
     let cs = $id(CAMERA_SETUP_ID);
-    if (cs) {
-      LOG('⚠️ Removendo camera-setup antigo');
-      cs.remove();
-    }
+    if (cs) { cs.remove(); }
 
     cs = document.createElement('div');
     cs.id = CAMERA_SETUP_ID;
@@ -70,11 +155,9 @@
     h2.style.cssText = 'color: #fff; margin-bottom: 15px;';
     card.appendChild(h2);
 
-    // Container de vídeo
     const videoContainer = document.createElement('div');
     videoContainer.style.cssText = 'position: relative; width: 360px; height: 240px; margin: 0 auto 15px; background: #000; border-radius: 6px; overflow: hidden;';
 
-    // Vídeo (VISÍVEL para setup)
     const video = document.createElement('video');
     video.id = 'videoEl';
     video.autoplay = true;
@@ -82,7 +165,6 @@
     video.playsInline = true;
     video.style.cssText = 'width: 100%; height: 100%; object-fit: cover;';
 
-    // Canvas (overlay para landmarks)
     const canvas = document.createElement('canvas');
     canvas.id = 'overlay';
     canvas.width = 360;
@@ -93,7 +175,6 @@
     videoContainer.appendChild(canvas);
     card.appendChild(videoContainer);
 
-    // Indicador de piscada
     const controlsRow = document.createElement('div');
     controlsRow.style.cssText = 'display: flex; gap: 10px; margin-bottom: 15px; justify-content: center;';
 
@@ -113,7 +194,6 @@
 
     controlsRow.appendChild(indicatorCol);
 
-    // Controles de ajuste
     const adjustCol = document.createElement('div');
     adjustCol.style.cssText = 'flex: 1; display: flex; flex-direction: column; gap: 8px; font-size: 13px; color: #ccc;';
 
@@ -126,7 +206,6 @@
     controls.forEach(ctrl => {
       const row = document.createElement('div');
       row.style.cssText = 'display: flex; justify-content: space-between; align-items: center; background: rgba(142, 212, 255, 0.1); padding: 6px 10px; border-radius: 4px;';
-
       const label = document.createElement('strong');
       label.textContent = ctrl.label + ':';
       row.appendChild(label);
@@ -159,7 +238,6 @@
     controlsRow.appendChild(adjustCol);
     card.appendChild(controlsRow);
 
-    // Botões de ação
     const actionsRow = document.createElement('div');
     actionsRow.style.cssText = 'display: flex; gap: 10px; justify-content: center;';
 
@@ -185,7 +263,6 @@
     actionsRow.appendChild(continueBtn);
     card.appendChild(actionsRow);
 
-    // Help text
     const help = document.createElement('p');
     help.textContent = 'Ajuste os parâmetros até o indicador piscar quando você piscar os olhos';
     help.style.cssText = 'margin-top: 15px; font-size: 12px; color: #999; text-align: center;';
@@ -198,7 +275,6 @@
     return cs;
   }
 
-  // ========== INICIALIZAR CÂMERA ==========
   let blinkListenerAttached = false;
 
   async function initCameraSetup() {
@@ -217,7 +293,6 @@
       return;
     }
 
-    // Listener de piscadas (apenas uma vez)
     if (!blinkListenerAttached) {
       document.addEventListener('blink:detected', (e) => {
         LOG('👁️ PISCADA!', e.detail);
@@ -232,7 +307,6 @@
       blinkListenerAttached = true;
     }
 
-    // BOTÃO INICIAR CÂMERA
     if (startBtn) {
       startBtn.onclick = async () => {
         LOG('▶️ Iniciando câmera');
@@ -249,6 +323,23 @@
 
           blinkDetectionReady = true;
 
+          // ✅ Salva preferência NO BACKGROUND
+          try {
+            await new Promise((resolve) => {
+              chrome.runtime.sendMessage(
+                { type: 'set-camera-pref', enabled: true },
+                (response) => {
+                  if (chrome.runtime.lastError) {
+                    LOG('⚠️ Erro ao salvar pref:', chrome.runtime.lastError);
+                  }
+                  resolve(response);
+                }
+              );
+            });
+          } catch (e) {
+            LOG('⚠️ Falha ao salvar preferência:', e);
+          }
+
           startBtn.textContent = '✓ Câmera Ativa';
           startBtn.style.background = '#4ade80';
 
@@ -258,6 +349,7 @@
           }
 
           LOG('✅ Câmera iniciada');
+
         } catch (err) {
           console.error('Erro ao iniciar:', err);
           startBtn.disabled = false;
@@ -271,12 +363,22 @@
       };
     }
 
-    // BOTÃO PARAR
     if (stopBtn) {
       stopBtn.onclick = () => {
         if (window.BlinkDetection) {
           window.BlinkDetection.stop();
+          blinkDetectionReady = false;
           LOG('⏹️ Câmera parada');
+
+          // ✅ Desabilita preferência
+          try {
+            chrome.runtime.sendMessage(
+              { type: 'set-camera-pref', enabled: false },
+              () => { }
+            );
+          } catch (e) {
+            LOG('⚠️ Erro ao desabilitar pref:', e);
+          }
 
           if (startBtn) {
             startBtn.textContent = 'Iniciar Câmera';
@@ -287,17 +389,19 @@
       };
     }
 
-    // BOTÃO CONTINUAR
     if (continueBtn) {
       continueBtn.onclick = async () => {
         LOG('➡️ Continuando para tela principal...');
 
-        // 💾 SALVA ESTADO
+        // ✅ Salva estado
         try {
           await new Promise(resolve => {
             chrome.runtime.sendMessage({
               type: 'save-state',
-              state: { setupCompleted: true, timestamp: Date.now() }
+              state: {
+                setupCompleted: true,
+                timestamp: Date.now()
+              }
             }, resolve);
           });
           LOG('💾 Estado salvo');
@@ -311,130 +415,48 @@
     }
   }
 
-  // ========== INICIALIZAR MAIN UI (TECLADO) ==========
   function initMainUI() {
     LOG('⌨️ Inicializando Main UI (iniciando ciclos)');
-
     try {
-      // Inicializa o teclado
       if (window.setActivePanel) {
         window.setActivePanel('keyboard');
         LOG('✅ setActivePanel(keyboard) executado');
       }
-
-      // Inicia os ciclos de seleção
       if (window.resetSelection) {
         window.resetSelection();
         LOG('✅ resetSelection() executado - ciclos iniciados!');
       }
-
       LOG('✅ Main UI pronto e ciclos ativos');
     } catch (e) {
       LOG('⚠️ Erro ao inicializar main UI:', e);
     }
   }
 
-  // ========== MOSTRAR TELA DE CÂMERA ==========
   async function showCameraSetup() {
     LOG('📸 Mostrando camera setup');
-
-    // Esconde outras telas de forma segura
     [$id(WELCOME_ID), $id(MAIN_ID)].forEach(el => { if (el) hideElementSafely(el); });
-
-    // Cria e mostra camera setup
     createCameraSetup();
     const cs = $id(CAMERA_SETUP_ID);
-    if (cs) {
-      cs.classList.remove('hidden');
-      cs.setAttribute('aria-hidden', 'false');
-      try { cs.focus && cs.focus(); } catch (e) { }
-    }
-
-    // Aguarda DOM renderizar
+    if (cs) { cs.classList.remove('hidden'); cs.setAttribute('aria-hidden', 'false'); try { cs.focus && cs.focus(); } catch (e) { } }
     await new Promise(resolve => requestAnimationFrame(resolve));
-
-    // Inicializa controles
     initCameraSetup();
   }
 
-  // ========== BIND BOTÕES INICIAIS ==========
   function bindButtons() {
     const startBtn = $id(BTN_START_ID);
     const closeBtn = $id(BTN_CLOSE_ID);
 
-    if (startBtn) {
-      startBtn.onclick = () => {
-        LOG('▶️ Botão Start clicado');
-        showCameraSetup();
-      };
-    }
-
-    if (closeBtn) {
-      closeBtn.onclick = () => {
-        try { window.close(); } catch (e) { }
-      };
-    }
+    if (startBtn) startBtn.onclick = () => { LOG('▶️ Botão Start clicado'); showCameraSetup(); };
+    if (closeBtn) closeBtn.onclick = () => { try { window.close(); } catch (e) { } };
   }
 
-  function hideElementSafely(el) {
-    try {
-      if (!el) return;
-      const active = document.activeElement;
-      if (active && el.contains(active)) {
-        try {
-          // primeiro tenta blur no elemento ativo
-          if (typeof active.blur === 'function') active.blur();
-        } catch (e) { }
-        try {
-          // enviar foco para body (fallback)
-          if (document.body && typeof document.body.focus === 'function') document.body.focus();
-        } catch (e) { }
-      }
-      el.classList.add('hidden');
-      el.setAttribute('aria-hidden', 'true');
-      // opcional: el.inert = true; // se quiser bloquear foco, checar compatibilidade
-    } catch (err) {
-      console.warn('hideElementSafely error', err);
-    }
-  }
-
-  // ========== BOOT ==========
   LOG('🎬 UI-MAIN.JS CARREGADO');
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-      LOG('📄 DOMContentLoaded');
-      bindButtons();
-      showWelcome();
-    });
-  } else {
-    LOG('📄 DOM já carregado');
-    bindButtons();
-    showWelcome();
-  }
-
-  // Debug helpers
-  window.__ui_debug = {
-    showCameraSetup,
-    hideCameraSetup,
-    createCameraSetup,
-    initCameraSetup,
-    initMainUI,
-    showWelcome,
-    showMain,
-    blinkDetectionReady: () => blinkDetectionReady
-  };
 
   async function checkSavedState() {
     try {
-      const response = await new Promise(resolve => {
-        chrome.runtime.sendMessage({ type: 'load-state' }, resolve);
-      });
-
+      const response = await new Promise(resolve => { chrome.runtime.sendMessage({ type: 'load-state' }, resolve); });
       if (response && response.ok && response.state) {
         LOG('💾 Estado salvo encontrado:', response.state);
-
-        // Se já passou pela configuração, pula welcome
         if (response.state.setupCompleted) {
           LOG('✅ Setup já completo, indo direto para Main');
           showMain();
@@ -442,30 +464,33 @@
           return true;
         }
       }
-    } catch (e) {
-      LOG('⚠️ Erro ao carregar estado:', e);
-    }
+    } catch (e) { LOG('⚠️ Erro ao carregar estado:', e); }
     return false;
   }
 
-  // Modifique o BOOT para:
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', async () => {
       LOG('📄 DOMContentLoaded');
+
+      setupCommandListener(); // ✅ Registra listener AQUI
       bindButtons();
 
       const hasState = await checkSavedState();
-      if (!hasState) {
-        showWelcome();
-      }
+      if (!hasState) showWelcome();
     });
   } else {
     LOG('📄 DOM já carregado');
+
+    setupCommandListener(); // ✅ E AQUI também
     bindButtons();
 
     checkSavedState().then(hasState => {
       if (!hasState) showWelcome();
     });
   }
+
+  window.__ui_debug = {
+    showCameraSetup, hideCameraSetup, createCameraSetup, initCameraSetup, initMainUI, showWelcome, showMain, blinkDetectionReady: () => blinkDetectionReady
+  };
 
 })();
