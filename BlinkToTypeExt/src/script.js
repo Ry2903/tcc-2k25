@@ -247,18 +247,73 @@
   // camera setup / play
   async function startCamera(constraints = { video: { facingMode: 'user' }, audio: false }) {
     try {
+      log('📹 startCamera chamado');
+
+      // ✅ CRÍTICO: Parar stream anterior completamente
+      if (stream) {
+        log('⏹️ Parando stream anterior');
+        stream.getTracks().forEach(t => {
+          t.stop();
+          t.enabled = false;
+        });
+        stream = null;
+      }
+
+      // ✅ Reset de estado
+      playing = false;
+      if (animationId) {
+        cancelAnimationFrame(animationId);
+        animationId = null;
+      }
+
+      // ✅ Aguardar um pouco para liberar recursos
+      await new Promise(r => setTimeout(r, 100));
+
+      // ✅ Novo stream
+      log('🎥 Solicitando novo stream');
       stream = await navigator.mediaDevices.getUserMedia(constraints);
+
       if (video) {
         video.srcObject = stream;
-        await video.play().catch(e => { /* autoplay block? */ });
+
+        // ✅ Aguardar vídeo estar realmente pronto
+        await new Promise((resolve, reject) => {
+          video.onloadedmetadata = () => {
+            log('✅ Video metadata carregado');
+            resolve();
+          };
+          video.onerror = (e) => {
+            log('❌ Video error:', e);
+            reject(e);
+          };
+          setTimeout(() => reject(new Error('Timeout aguardando video')), 5000);
+        });
+
+        await video.play().catch(e => log('⚠️ Autoplay blocked:', e));
+
+        // ✅ Configurar canvas
+        if (canvas && video.videoWidth && video.videoHeight) {
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          ctx = canvas.getContext('2d');
+          log('✅ Canvas configurado:', canvas.width, 'x', canvas.height);
+        }
+
+        // ✅ Iniciar loop
+        if (!playing && !animationId) {
+          playing = true;
+          animationId = requestAnimationFrame(onPlay);
+          log('✅ Loop iniciado');
+        }
       }
+
+      log('✅ startCamera completado com sucesso');
       return stream;
     } catch (err) {
-      log('Erro ao iniciar camera:', err);
+      log('❌ Erro ao iniciar camera:', err);
       throw err;
     }
   }
-
   function stopCameraAndLoop() {
     playing = false;
     if (animationId) {
@@ -371,6 +426,41 @@
       };
     }
   };
+
+  // ✅ CRITICAL: Re-attach video event listener quando vídeo carrega
+  if (video) {
+    video.addEventListener('loadeddata', () => {
+      log('📹 Vídeo carregado, configurando canvas...');
+      tryConfigureCanvas();
+    });
+
+    video.addEventListener('playing', () => {
+      log('▶️ Vídeo playing, iniciando loop...');
+      if (!playing && !animationId) {
+        playing = true;
+        animationId = requestAnimationFrame(onPlay);
+      }
+    });
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      log('👁️ Aba ficou invisível, pausando detecção');
+      if (playing) {
+        playing = false;
+        if (animationId) {
+          cancelAnimationFrame(animationId);
+          animationId = null;
+        }
+      }
+    } else {
+      log('👁️ Aba ficou visível, retomando detecção');
+      if (stream && video && video.srcObject && !playing) {
+        playing = true;
+        animationId = requestAnimationFrame(onPlay);
+      }
+    }
+  });
 
   // export
   window.BlinkDetection = BlinkDetection;

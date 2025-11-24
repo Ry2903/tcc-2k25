@@ -11,6 +11,8 @@
   const BTN_CLOSE_ID = 'btn-close';
 
   let blinkDetectionReady = false;
+  let cameraSetupInitialized = false;
+  let mainUIInitialized = false; // ✅ NOVO: prevenir re-init
 
   function $id(id) { return document.getElementById(id); }
 
@@ -57,75 +59,106 @@
     showMain();
   }
 
-  // ========== LISTENER DE COMANDOS (CORRIGIDO) ==========
+  // ========== LISTENER DE COMANDOS ==========
   function setupCommandListener() {
-    if (window.__ui_postmsg_registered) return; // Já registrado
+    if (window.__ui_postmsg_registered) {
+      LOG('⚠️ Listener já registrado, pulando');
+      return;
+    }
 
     window.addEventListener('message', (ev) => {
       if (!ev?.data) return;
-
       const d = ev.data;
 
       if (d.type === 'blink:command') {
-        // Executa async sem bloquear
         (async () => {
           try {
             if (d.command === 'start-camera') {
               LOG('📸 Comando: start-camera recebido');
 
-              const startBtn = document.getElementById('start-camera');
-              if (startBtn && !startBtn.disabled) {
-                startBtn.click();
+              // ✅ Aguardar elementos
+              await new Promise(r => setTimeout(r, 300));
 
-                // Aguarda BlinkDetection estar pronto
-                const maxWait = 4000;
-                const startTime = Date.now();
+              const video = $id('videoEl');
+              const canvas = $id('overlay');
 
-                while (Date.now() - startTime < maxWait) {
-                  if (window.BlinkDetection?.isRunning || blinkDetectionReady) {
-                    LOG('✅ BlinkDetection pronto');
+              if (!video || !canvas) {
+                LOG('⚠️ Elementos não encontrados, criando setup...');
+                createCameraSetup();
+                await new Promise(r => setTimeout(r, 300));
+              }
 
-                    // Inicia detecção automática
-                    setTimeout(() => {
-                      if (typeof window.iniciarDeteccaoAutomatica === 'function') {
-                        window.iniciarDeteccaoAutomatica().catch(e =>
-                          LOG('⚠️ iniciarDeteccaoAutomatica falhou:', e)
-                        );
-                      } else {
-                        if (window.setActivePanel) window.setActivePanel('keyboard');
-                        if (window.resetSelection) window.resetSelection();
-                      }
-                    }, 200);
+              // ✅ Verificar se BlinkDetection existe
+              if (!window.BlinkDetection) {
+                LOG('❌ BlinkDetection não disponível');
+                return;
+              }
 
-                    break;
-                  }
-                  await new Promise(r => setTimeout(r, 200));
-                }
-              } else {
-                // Fallback: API direta
-                if (window.BlinkDetection?.init) {
+              try {
+                // ✅ Init apenas uma vez
+                if (!window.BlinkDetection._initialized) {
+                  LOG('🔧 Inicializando BlinkDetection pela primeira vez');
                   await window.BlinkDetection.init();
+                  window.BlinkDetection._initialized = true;
+                }
+                
+                // ✅ Verificar se câmera já está rodando
+                const state = window.BlinkDetection.getState();
+                if (state && state.playing) {
+                  LOG('⚠️ Câmera já está rodando, não reiniciar');
+                } else {
+                  LOG('📸 Iniciando câmera...');
                   await window.BlinkDetection.startCamera();
                   blinkDetectionReady = true;
-
-                  if (typeof window.iniciarDeteccaoAutomatica === 'function') {
-                    await window.iniciarDeteccaoAutomatica();
-                  }
+                  LOG('✅ Câmera iniciada com sucesso');
                 }
+
+                // ✅ Mostrar main e iniciar UI (apenas se não foi feito)
+                setTimeout(() => {
+                  const cs = $id(CAMERA_SETUP_ID);
+                  if (cs && !cs.classList.contains('hidden')) {
+                    LOG('⏸️ Ainda em setup, aguardando usuário clicar Continuar');
+                  } else {
+                    LOG('➡️ Indo para main');
+                    showMain();
+                    
+                    // ✅ CRÍTICO: Init apenas uma vez
+                    if (!mainUIInitialized) {
+                      setTimeout(() => {
+                        initMainUI();
+                        mainUIInitialized = true;
+                        
+                        // ✅ Target após inicialização
+                        setTimeout(() => {
+                          if (typeof window.acionarTarget === 'function') {
+                            LOG('🎯 Acionando target');
+                            window.acionarTarget();
+                          }
+                        }, 500);
+                      }, 200);
+                    } else {
+                      LOG('⚠️ Main UI já inicializado, apenas resetando seleção');
+                      if (window.resetSelection) {
+                        window.resetSelection();
+                      }
+                    }
+                  }
+                }, 300);
+
+              } catch (err) {
+                LOG('❌ Erro ao iniciar câmera:', err);
               }
+
             } else if (d.command === 'stop-camera') {
               LOG('⏹️ Comando: stop-camera recebido');
-
-              const stopBtn = document.getElementById('stop-camera');
-              if (stopBtn) {
-                stopBtn.click();
-              } else if (window.BlinkDetection?.stop) {
+              if (window.BlinkDetection?.stop) {
                 window.BlinkDetection.stop();
                 blinkDetectionReady = false;
+                mainUIInitialized = false; // ✅ Reset flag
               }
             }
           } catch (err) {
-            LOG('⚠️ Erro ao processar comando:', err);
+            LOG('❌ Erro ao processar comando:', err);
           }
         })();
       }
@@ -278,6 +311,11 @@
   let blinkListenerAttached = false;
 
   async function initCameraSetup() {
+    if (cameraSetupInitialized) {
+      LOG('⚠️ Camera setup já inicializado');
+      return;
+    }
+
     LOG('🎬 Inicializando camera setup');
 
     const video = $id('videoEl');
@@ -318,12 +356,14 @@
             throw new Error('BlinkDetection não disponível');
           }
 
-          await window.BlinkDetection.init();
+          if (!window.BlinkDetection._initialized) {
+            await window.BlinkDetection.init();
+            window.BlinkDetection._initialized = true;
+          }
+          
           await window.BlinkDetection.startCamera();
-
           blinkDetectionReady = true;
 
-          // ✅ Salva preferência NO BACKGROUND
           try {
             await new Promise((resolve) => {
               chrome.runtime.sendMessage(
@@ -336,6 +376,7 @@
                 }
               );
             });
+            LOG('✅ Preferência salva');
           } catch (e) {
             LOG('⚠️ Falha ao salvar preferência:', e);
           }
@@ -368,9 +409,9 @@
         if (window.BlinkDetection) {
           window.BlinkDetection.stop();
           blinkDetectionReady = false;
+          mainUIInitialized = false;
           LOG('⏹️ Câmera parada');
 
-          // ✅ Desabilita preferência
           try {
             chrome.runtime.sendMessage(
               { type: 'set-camera-pref', enabled: false },
@@ -391,9 +432,17 @@
 
     if (continueBtn) {
       continueBtn.onclick = async () => {
-        LOG('➡️ Continuando para tela principal...');
+        LOG('➡️ Botão Continuar clicado');
 
-        // ✅ Salva estado
+        if (!blinkDetectionReady && !window.BlinkDetection?.getState?.()?.playing) {
+          LOG('⚠️ Câmera não ativa');
+          if (piscasEl) {
+            piscasEl.textContent = '⚠️ Inicie a câmera primeiro!';
+            piscasEl.style.color = '#ff7b7b';
+          }
+          return;
+        }
+
         try {
           await new Promise(resolve => {
             chrome.runtime.sendMessage({
@@ -404,29 +453,50 @@
               }
             }, resolve);
           });
-          LOG('💾 Estado salvo');
+          LOG('💾 Setup marcado como completo');
         } catch (e) {
           LOG('⚠️ Erro ao salvar estado:', e);
         }
 
         hideCameraSetup();
-        setTimeout(() => initMainUI(), 100);
+        
+        setTimeout(() => {
+          if (!mainUIInitialized) {
+            initMainUI();
+            mainUIInitialized = true;
+          }
+          
+          setTimeout(() => {
+            if (typeof window.acionarTarget === 'function') {
+              LOG('🎯 Acionando target');
+              window.acionarTarget();
+            }
+          }, 500);
+        }, 200);
       };
     }
+
+    cameraSetupInitialized = true;
+    LOG('✅ Camera setup inicializado');
   }
 
   function initMainUI() {
-    LOG('⌨️ Inicializando Main UI (iniciando ciclos)');
+    if (mainUIInitialized) {
+      LOG('⚠️ Main UI já foi inicializado, pulando');
+      return;
+    }
+
+    LOG('⌨️ Inicializando Main UI');
     try {
       if (window.setActivePanel) {
         window.setActivePanel('keyboard');
-        LOG('✅ setActivePanel(keyboard) executado');
+        LOG('✅ setActivePanel(keyboard)');
       }
       if (window.resetSelection) {
         window.resetSelection();
-        LOG('✅ resetSelection() executado - ciclos iniciados!');
+        LOG('✅ resetSelection()');
       }
-      LOG('✅ Main UI pronto e ciclos ativos');
+      LOG('✅ Main UI pronto');
     } catch (e) {
       LOG('⚠️ Erro ao inicializar main UI:', e);
     }
@@ -437,16 +507,20 @@
     [$id(WELCOME_ID), $id(MAIN_ID)].forEach(el => { if (el) hideElementSafely(el); });
     createCameraSetup();
     const cs = $id(CAMERA_SETUP_ID);
-    if (cs) { cs.classList.remove('hidden'); cs.setAttribute('aria-hidden', 'false'); try { cs.focus && cs.focus(); } catch (e) { } }
+    if (cs) { 
+      cs.classList.remove('hidden'); 
+      cs.setAttribute('aria-hidden', 'false'); 
+      try { cs.focus && cs.focus(); } catch (e) { } 
+    }
     await new Promise(resolve => requestAnimationFrame(resolve));
-    initCameraSetup();
+    await initCameraSetup();
   }
 
   function bindButtons() {
     const startBtn = $id(BTN_START_ID);
     const closeBtn = $id(BTN_CLOSE_ID);
 
-    if (startBtn) startBtn.onclick = () => { LOG('▶️ Botão Start clicado'); showCameraSetup(); };
+    if (startBtn) startBtn.onclick = () => { LOG('▶️ Start'); showCameraSetup(); };
     if (closeBtn) closeBtn.onclick = () => { try { window.close(); } catch (e) { } };
   }
 
@@ -454,43 +528,62 @@
 
   async function checkSavedState() {
     try {
-      const response = await new Promise(resolve => { chrome.runtime.sendMessage({ type: 'load-state' }, resolve); });
+      const response = await new Promise(resolve => { 
+        chrome.runtime.sendMessage({ type: 'load-state' }, resolve); 
+      });
+      
+      LOG('💾 load-state:', response);
+      
       if (response && response.ok && response.state) {
-        LOG('💾 Estado salvo encontrado:', response.state);
-        if (response.state.setupCompleted) {
-          LOG('✅ Setup já completo, indo direto para Main');
-          showMain();
-          setTimeout(() => initMainUI(), 100);
+        if (response.state.setupCompleted === true) {
+          LOG('✅ Setup completo');
           return true;
+        } else {
+          LOG('⏸️ Setup incompleto');
+          return false;
         }
       }
-    } catch (e) { LOG('⚠️ Erro ao carregar estado:', e); }
+    } catch (e) { 
+      LOG('⚠️ Erro ao carregar estado:', e); 
+    }
     return false;
   }
+
+  setupCommandListener();
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', async () => {
       LOG('📄 DOMContentLoaded');
-
-      setupCommandListener(); // ✅ Registra listener AQUI
       bindButtons();
 
       const hasState = await checkSavedState();
-      if (!hasState) showWelcome();
+      if (!hasState) {
+        showWelcome();
+      } else {
+        LOG('⏸️ Aguardando start-camera');
+      }
     });
   } else {
-    LOG('📄 DOM já carregado');
-
-    setupCommandListener(); // ✅ E AQUI também
+    LOG('📄 DOM carregado');
     bindButtons();
 
     checkSavedState().then(hasState => {
-      if (!hasState) showWelcome();
+      if (!hasState) {
+        showWelcome();
+      } else {
+        LOG('⏸️ Aguardando start-camera');
+      }
     });
   }
 
   window.__ui_debug = {
-    showCameraSetup, hideCameraSetup, createCameraSetup, initCameraSetup, initMainUI, showWelcome, showMain, blinkDetectionReady: () => blinkDetectionReady
+    showCameraSetup, 
+    hideCameraSetup, 
+    initMainUI, 
+    showWelcome, 
+    showMain, 
+    blinkDetectionReady: () => blinkDetectionReady,
+    mainUIInitialized: () => mainUIInitialized
   };
 
 })();
