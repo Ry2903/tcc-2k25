@@ -15,10 +15,29 @@
   let showVideoInCanvas = true;
 
   // EAR / blink thresholds (padrões)
-  let EAR_THRESHOLD = 0.279;
-  let EAR_CONSEC_FRAMES = 1.5;
-  let EAR_REOPEN_FRAMES = 1.5;
-  let DEBOUNCE_AFTER_BLINK = 2; // frames
+  let EAR_THRESHOLD = 0.281;
+  let EAR_CONSEC_FRAMES = 2.9;
+  let EAR_REOPEN_FRAMES = EAR_CONSEC_FRAMES + 0.5;
+  let DEBOUNCE_AFTER_BLINK = 2.8; // frames
+
+if (typeof window !== 'undefined') {
+  window.BlinkDetectionVars = {
+    get EAR_THRESHOLD() { return EAR_THRESHOLD; },
+    set EAR_THRESHOLD(v) { EAR_THRESHOLD = v; },
+    get EAR_CONSEC_FRAMES() { return EAR_CONSEC_FRAMES; },
+    set EAR_CONSEC_FRAMES(v) { EAR_CONSEC_FRAMES = v; },
+    get DEBOUNCE_AFTER_BLINK() { return DEBOUNCE_AFTER_BLINK; },
+    set DEBOUNCE_AFTER_BLINK(v) { DEBOUNCE_AFTER_BLINK = v; },
+    // Valores padrão para inicialização
+    getDefaults() {
+      return {
+        threshold: EAR_THRESHOLD,
+        frames: EAR_CONSEC_FRAMES,
+        debounce: DEBOUNCE_AFTER_BLINK,
+      };
+    }
+  };
+}
 
   // contadores temporários
   let earBelowFrames = 0;
@@ -56,11 +75,11 @@
     debInc = document.getElementById('deb-inc');
 
     if (thrDec) thrDec.onclick = () => {
-      EAR_THRESHOLD = Math.max(0.05, EAR_THRESHOLD - 0.01);
+      EAR_THRESHOLD = Math.max(0.05, EAR_THRESHOLD - 0.001);
       const el = document.getElementById('threshold-val'); if (el) el.textContent = EAR_THRESHOLD.toFixed(3);
     };
     if (thrInc) thrInc.onclick = () => {
-      EAR_THRESHOLD = Math.min(0.5, EAR_THRESHOLD + 0.01);
+      EAR_THRESHOLD = Math.min(0.5, EAR_THRESHOLD + 0.001);
       const el = document.getElementById('threshold-val'); if (el) el.textContent = EAR_THRESHOLD.toFixed(3);
     };
     if (framesDec) framesDec.onclick = () => {
@@ -72,7 +91,7 @@
       const el = document.getElementById('frames-val'); if (el) el.textContent = EAR_CONSEC_FRAMES;
     };
     if (debDec) debDec.onclick = () => {
-      DEBOUNCE_AFTER_BLINK = Math.max(0, DEBOUNCE_AFTER_BLINK - 0.1);
+      DEBOUNCE_AFTER_BLINK = Math.max(0, DEBOUNCE_AFTER_BLINK + 0.1);
       const el = document.getElementById('debounce-val'); if (el) el.textContent = (DEBOUNCE_AFTER_BLINK / 1000).toFixed(2);
     };
     if (debInc) debInc.onclick = () => {

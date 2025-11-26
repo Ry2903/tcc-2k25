@@ -17,10 +17,10 @@ let activeMode = 'keyboard';
 
 const numColunas = 6;
 let rowInterval = 1200;
-let firstRowDelay = rowInterval + 600;
-let controlsRowInterval = rowInterval + 900;
-let controlsFirstRowDelay = firstRowDelay + 600;
-const COL_ROUNDS_MAX = 3;
+let firstRowDelay = rowInterval + 400;
+let controlsRowInterval = rowInterval + 200;
+let controlsFirstRowDelay = firstRowDelay + 400;
+const COL_ROUNDS_MAX = 2;
 
 /* ---------------- TIMERS / ESTADO RUNTIME ---------------- */
 let rowIntervalId = null;
@@ -42,21 +42,6 @@ let colRounds = 0;
 let selectingColumn = false;
 let controlsRowIndex = 0;
 let controlsColIndex = 0;
-
-if (typeof window !== 'undefined') {
-  Object.defineProperty(window.BlinkDetection || {}, 'EAR_THRESHOLD', {
-    get: () => EAR_THRESHOLD,
-    set: (v) => { EAR_THRESHOLD = v; }
-  });
-  Object.defineProperty(window.BlinkDetection || {}, 'EAR_CONSEC_FRAMES', {
-    get: () => EAR_CONSEC_FRAMES,
-    set: (v) => { EAR_CONSEC_FRAMES = v; }
-  });
-  Object.defineProperty(window.BlinkDetection || {}, 'DEBOUNCE_AFTER_BLINK', {
-    get: () => DEBOUNCE_AFTER_BLINK,
-    set: (v) => { DEBOUNCE_AFTER_BLINK = v; }
-  });
-}
 
 /* ---------------- DEBUG E REGISTRY ---------------- */
 if (typeof window !== 'undefined' && window.__kb_debug === undefined) {
@@ -514,12 +499,41 @@ function sendMessageToBackground(message) {
 
 async function abrirNovaAba() {
   console.log('[KB] Abrindo nova aba...');
-  const response = await sendMessageToBackground({
-    type: 'open-new-tab',
-    url: 'https://www.google.com'
-  });
-  if (response.ok) console.log('[KB] ✅ Nova aba criada');
-  else console.error('[KB] ❌ Erro ao criar aba:', response.error);
+  
+  try {
+    // Verificar aba atual
+    const activeTabs = await new Promise(resolve => {
+      chrome.tabs.query({ active: true, currentWindow: true }, resolve);
+    });
+    
+    let targetUrl = 'https://www.google.com';
+    
+    if (activeTabs && activeTabs[0]) {
+      const currentTab = activeTabs[0];
+      const currentUrl = currentTab.url || '';
+      
+      // Se aba atual é compatível, usar mesma URL
+      if (!currentUrl.startsWith('chrome://') && 
+          !currentUrl.startsWith('edge://') && 
+          !currentUrl.startsWith('about:') &&
+          !currentUrl.startsWith('chrome-extension://')) {
+        targetUrl = currentUrl;
+      }
+    }
+    
+    const response = await sendMessageToBackground({
+      type: 'open-new-tab',
+      url: targetUrl
+    });
+    
+    if (response.ok) {
+      console.log('[KB] ✅ Nova aba criada');
+    } else {
+      console.error('[KB] ❌ Erro ao criar aba:', response.error);
+    }
+  } catch (err) {
+    console.error('[KB] Erro ao abrir nova aba:', err);
+  }
 }
 
 async function irParaAbaAnterior() {
@@ -538,9 +552,54 @@ async function irParaProximaAba() {
 
 async function fecharAbaAtual() {
   console.log('[KB] Fechando aba atual...');
-  const response = await sendMessageToBackground({ type: 'close-current-tab' });
-  if (response.ok) console.log('[KB] ✅ Aba fechada');
-  else console.log('[KB] ℹ️', response.message || 'Não foi possível fechar aba');
+
+  try {
+    // Verificar quantas abas com extensão ativa existem
+    const allTabs = await new Promise(resolve => {
+      chrome.tabs.query({ currentWindow: true }, resolve);
+    });
+
+    const activeTabs = await new Promise(resolve => {
+      chrome.tabs.query({ active: true, currentWindow: true }, resolve);
+    });
+
+    if (!activeTabs || !activeTabs[0]) {
+      console.log('[KB] ℹ️ Não foi possível identificar aba atual');
+      return;
+    }
+
+    const currentTab = activeTabs[0];
+
+    // Contar abas com extensão ativa
+    let activeExtensionCount = 0;
+    for (const tab of allTabs) {
+      const isActive = await new Promise(resolve => {
+        chrome.runtime.sendMessage(
+          { type: 'check-tab-active', tabId: tab.id },
+          response => resolve(response?.active || false)
+        );
+      });
+      if (isActive) activeExtensionCount++;
+    }
+
+    console.log('[KB] 📊 Abas com extensão ativa:', activeExtensionCount);
+
+    // Se é a última aba com extensão, não permitir fechar
+    if (activeExtensionCount <= 1) {
+      console.log('[KB] ⚠️ Não pode fechar a última aba com a extensão ativa');
+      return;
+    }
+
+    // Fechar aba
+    const response = await sendMessageToBackground({ type: 'close-current-tab' });
+    if (response.ok) {
+      console.log('[KB] ✅ Aba fechada');
+    } else {
+      console.log('[KB] ℹ️', response.message || 'Não foi possível fechar aba');
+    }
+  } catch (err) {
+    console.error('[KB] Erro ao fechar aba:', err);
+  }
 }
 
 /* ============ ICON HELPERS ============ */
@@ -679,69 +738,78 @@ function ensureControlsBaseGroups() {
     return b;
   }
 
-  // ✅ THRESHOLD
+  // ✅ Pegar valores padrão do script.js
+  const defaults = window.BlinkDetectionVars?.getDefaults?.() || { threshold: 0.284, frames: 1.5, debounce: 1 };
+
+  // ✅ THRESHOLD (Limiar para piscada) - STEP 0.01
   const thrDec = mkBtn('thr-dec', '<');
   const thrSpan = document.createElement('span');
   thrSpan.id = 'threshold-val';
-  thrSpan.textContent = '0.279';
+  thrSpan.textContent = defaults.threshold.toFixed(3);
   const thrInc = mkBtn('thr-inc', '>');
-  mkGroup('Threshold', [thrDec, thrSpan, thrInc]);
+  mkGroup('Limiar para piscada', [thrDec, thrSpan, thrInc]);
 
-  // ✅ Wiring threshold buttons
+  // ✅ Wiring threshold buttons - STEP 0.01
   thrDec.onclick = () => {
-    if (window.BlinkDetection && typeof window.BlinkDetection.EAR_THRESHOLD !== 'undefined') {
-      window.BlinkDetection.EAR_THRESHOLD = Math.max(0.05, window.BlinkDetection.EAR_THRESHOLD - 0.01);
-      thrSpan.textContent = window.BlinkDetection.EAR_THRESHOLD.toFixed(3);
+    if (window.BlinkDetectionVars) {
+      const newVal = window.BlinkDetectionVars.EAR_THRESHOLD - 0.001;
+      window.BlinkDetectionVars.EAR_THRESHOLD = Math.max(0.05, newVal);
+      thrSpan.textContent = window.BlinkDetectionVars.EAR_THRESHOLD.toFixed(3);
     }
   };
   thrInc.onclick = () => {
-    if (window.BlinkDetection && typeof window.BlinkDetection.EAR_THRESHOLD !== 'undefined') {
-      window.BlinkDetection.EAR_THRESHOLD = Math.min(0.5, window.BlinkDetection.EAR_THRESHOLD + 0.01);
-      thrSpan.textContent = window.BlinkDetection.EAR_THRESHOLD.toFixed(3);
+    if (window.BlinkDetectionVars) {
+      const newVal = window.BlinkDetectionVars.EAR_THRESHOLD + 0.001;
+      window.BlinkDetectionVars.EAR_THRESHOLD = Math.min(0.5, newVal);
+      thrSpan.textContent = window.BlinkDetectionVars.EAR_THRESHOLD.toFixed(3);
     }
   };
 
-  // ✅ FRAMES
+  // ✅ FRAMES - STEP 0.1
   const frmDec = mkBtn('frm-dec', '<');
   const frmSpan = document.createElement('span');
   frmSpan.id = 'frames-val';
-  frmSpan.textContent = '1.5';
+  frmSpan.textContent = defaults.frames.toFixed(1);
   const frmInc = mkBtn('frm-inc', '>');
   mkGroup('Frames consecutivos', [frmDec, frmSpan, frmInc]);
 
-  // ✅ Wiring frames buttons
+  // ✅ Wiring frames buttons - STEP 0.1
   frmDec.onclick = () => {
-    if (window.BlinkDetection && typeof window.BlinkDetection.EAR_CONSEC_FRAMES !== 'undefined') {
-      window.BlinkDetection.EAR_CONSEC_FRAMES = Math.max(1, window.BlinkDetection.EAR_CONSEC_FRAMES - 0.1);
-      frmSpan.textContent = window.BlinkDetection.EAR_CONSEC_FRAMES.toFixed(1);
+    if (window.BlinkDetectionVars) {
+      const newVal = window.BlinkDetectionVars.EAR_CONSEC_FRAMES - 0.1;
+      window.BlinkDetectionVars.EAR_CONSEC_FRAMES = Math.max(1, newVal);
+      frmSpan.textContent = window.BlinkDetectionVars.EAR_CONSEC_FRAMES.toFixed(1);
     }
   };
   frmInc.onclick = () => {
-    if (window.BlinkDetection && typeof window.BlinkDetection.EAR_CONSEC_FRAMES !== 'undefined') {
-      window.BlinkDetection.EAR_CONSEC_FRAMES = Math.min(6, window.BlinkDetection.EAR_CONSEC_FRAMES + 0.1);
-      frmSpan.textContent = window.BlinkDetection.EAR_CONSEC_FRAMES.toFixed(1);
+    if (window.BlinkDetectionVars) {
+      const newVal = window.BlinkDetectionVars.EAR_CONSEC_FRAMES + 0.1;
+      window.BlinkDetectionVars.EAR_CONSEC_FRAMES = Math.min(6, newVal);
+      frmSpan.textContent = window.BlinkDetectionVars.EAR_CONSEC_FRAMES.toFixed(1);
     }
   };
 
-  // ✅ DEBOUNCE
+  // ✅ DEBOUNCE - STEP 0.1
   const debDec = mkBtn('deb-dec', '<');
   const debSpan = document.createElement('span');
   debSpan.id = 'debounce-val';
-  debSpan.textContent = '1.0';
+  debSpan.textContent = defaults.debounce.toFixed(1);
   const debInc = mkBtn('deb-inc', '>');
   mkGroup('Debounce', [debDec, debSpan, debInc]);
 
-  // ✅ Wiring debounce buttons
+  // ✅ Wiring debounce buttons - STEP 0.1
   debDec.onclick = () => {
-    if (window.BlinkDetection && typeof window.BlinkDetection.DEBOUNCE_AFTER_BLINK !== 'undefined') {
-      window.BlinkDetection.DEBOUNCE_AFTER_BLINK = Math.max(0, window.BlinkDetection.DEBOUNCE_AFTER_BLINK - 0.1);
-      debSpan.textContent = window.BlinkDetection.DEBOUNCE_AFTER_BLINK.toFixed(1);
+    if (window.BlinkDetectionVars) {
+      const newVal = window.BlinkDetectionVars.DEBOUNCE_AFTER_BLINK - 0.1;
+      window.BlinkDetectionVars.DEBOUNCE_AFTER_BLINK = Math.max(0, newVal);
+      debSpan.textContent = window.BlinkDetectionVars.DEBOUNCE_AFTER_BLINK.toFixed(1);
     }
   };
   debInc.onclick = () => {
-    if (window.BlinkDetection && typeof window.BlinkDetection.DEBOUNCE_AFTER_BLINK !== 'undefined') {
-      window.BlinkDetection.DEBOUNCE_AFTER_BLINK = Math.min(10, window.BlinkDetection.DEBOUNCE_AFTER_BLINK + 0.1);
-      debSpan.textContent = window.BlinkDetection.DEBOUNCE_AFTER_BLINK.toFixed(1);
+    if (window.BlinkDetectionVars) {
+      const newVal = window.BlinkDetectionVars.DEBOUNCE_AFTER_BLINK + 0.1;
+      window.BlinkDetectionVars.DEBOUNCE_AFTER_BLINK = Math.min(10, newVal);
+      debSpan.textContent = window.BlinkDetectionVars.DEBOUNCE_AFTER_BLINK.toFixed(1);
     }
   };
 
@@ -753,7 +821,6 @@ function ensureControlsBaseGroups() {
   const rowInc = mkBtn('row-interval-inc', '>');
   mkGroup('Intervalo entre linhas', [rowDec, rowSpan, rowInc]);
 
-  // ✅ Wiring row interval buttons
   rowDec.onclick = () => {
     rowInterval = Math.max(200, rowInterval - 100);
     rowSpan.textContent = `${rowInterval} ms`;
@@ -773,7 +840,6 @@ function ensureControlsBaseGroups() {
   toggleBtn.dataset.active = 'true';
   mkGroup('\u00A0', [toggleBtn]);
 
-  // ✅ Wiring detection toggle
   toggleBtn.onclick = () => {
     const isActive = toggleBtn.dataset.active === 'true';
     toggleBtn.dataset.active = String(!isActive);
@@ -781,12 +847,10 @@ function ensureControlsBaseGroups() {
 
     if (window.BlinkDetection) {
       if (!isActive) {
-        // Ligar detecção
         if (window.BlinkDetection.startCamera) {
           window.BlinkDetection.startCamera().catch(e => console.error('Erro ao iniciar câmera:', e));
         }
       } else {
-        // Desligar detecção
         if (window.BlinkDetection.stop) {
           window.BlinkDetection.stop();
         }
@@ -796,14 +860,13 @@ function ensureControlsBaseGroups() {
     document.dispatchEvent(new CustomEvent('detection:toggled', { detail: { active: !isActive } }));
   };
 
-  // ✅ GEAR BUTTON (voltar para toolbar)
+  // ✅ GEAR BUTTON
   const gearBtn = document.createElement('button');
   gearBtn.id = 'settings-gear-btn';
   gearBtn.className = 'icon-btn';
   gearBtn.innerHTML = getIconHTML('gear');
   mkGroup('\u00A0', [gearBtn]);
 
-  // ✅ Wiring gear button
   gearBtn.onclick = () => {
     setActivePanel('toolbar');
     resetSelection();

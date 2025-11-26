@@ -221,7 +221,7 @@ async function injectExtension(tabId, retries = 3) {
 
       // Aguardar UI estar pronta antes de enviar comandos
       console.log('[Background] ⏳ Aguardando ui-ready da aba', tabId);
-      
+
       return true;
     } catch (err) {
       console.warn(`[Background] Tentativa ${i + 1}/${retries} falhou:`, err && err.message);
@@ -524,6 +524,24 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
         sendResp({ ok: true, setupCompleted, cameraEnabled });
       } catch (err) {
         sendResp({ ok: false, error: err?.message });
+      }
+    })();
+    return true;
+  }
+
+  // check-tab-active
+  if (msg.type === 'check-tab-active') {
+    (async () => {
+      try {
+        const tabId = msg.tabId;
+        if (!tabId) {
+          sendResp({ active: false });
+          return;
+        }
+        const active = await isTabActive(tabId);
+        sendResp({ active });
+      } catch (err) {
+        sendResp({ active: false });
       }
     })();
     return true;

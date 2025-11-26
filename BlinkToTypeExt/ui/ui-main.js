@@ -239,10 +239,13 @@
     const adjustCol = document.createElement('div');
     adjustCol.style.cssText = 'flex: 1; display: flex; flex-direction: column; gap: 8px; font-size: 13px; color: #ccc;';
 
+    // ✅ Pegar valores do script.js
+    const defaults = window.BlinkDetectionVars?.getDefaults?.() || { threshold: 0.279, frames: 1.5, debounce: 2 };
+
     const controls = [
-      { id: 'threshold', label: 'Threshold', value: '0.279', dec: 'thr-dec', inc: 'thr-inc' },
-      { id: 'frames', label: 'Frames', value: '1.5', dec: 'frm-dec', inc: 'frm-inc' },
-      { id: 'debounce', label: 'Debounce', value: '1.0', dec: 'deb-dec', inc: 'deb-inc' }
+      { id: 'threshold', label: 'Limiar', value: defaults.threshold.toFixed(3), dec: 'thr-dec', inc: 'thr-inc' },
+      { id: 'frames', label: 'Frames', value: defaults.frames.toFixed(1), dec: 'frm-dec', inc: 'frm-inc' },
+      { id: 'debounce', label: 'Debounce', value: defaults.debounce.toFixed(1), dec: 'deb-dec', inc: 'deb-inc' }
     ];
 
     controls.forEach(ctrl => {
@@ -311,7 +314,7 @@
     card.appendChild(help);
 
     cs.appendChild(card);
-    
+
     const mainEl = $id(MAIN_ID);
     if (mainEl) {
       document.body.insertBefore(cs, mainEl);
@@ -668,7 +671,7 @@
         // ✅ Se setup completo, ir direto para main
         LOG('➡️ Setup completo, indo para main');
         showMain();
-        
+
         // ✅ Inicializar main UI
         if (!mainUIInitialized) {
           await new Promise(r => setTimeout(r, 200));
@@ -691,7 +694,7 @@
         // ✅ Se setup completo, ir direto para main
         LOG('➡️ Setup completo, indo para main');
         showMain();
-        
+
         // ✅ Inicializar main UI
         if (!mainUIInitialized) {
           await new Promise(r => setTimeout(r, 200));
