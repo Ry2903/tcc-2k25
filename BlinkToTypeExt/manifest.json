@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Blink To Type",
   "description": "Teclado Virtual controlado por piscadas",
-  "version": "0.3.0",
+  "version": "1.0.0",
   "icons": {
     "16": "icons/logo-16.png",
     "48": "icons/logo-48.png",

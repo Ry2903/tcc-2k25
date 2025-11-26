@@ -8,6 +8,12 @@ chrome.runtime.onStartup.addListener(() => {
   console.log('sw start');
 });
 
+// Rastreia quais abas já receberam ui-ready (evita duplicação)
+const readyTabs = new Set();
+
+// Gerenciamento de aba ativa atual
+let currentActiveTabId = null;
+
 // ----------------------
 // Storage helpers (promisified)
 // ----------------------
@@ -42,10 +48,10 @@ function storageSet(obj) {
 // ----------------------
 const STATE_KEY = 'blink_extension_state';
 const ACTIVE_TABS_KEY = 'blink_active_tabs';
-const CAMERA_PREF_KEY = 'blink_camera_prefs';
-const SETUP_COMPLETED_KEY = 'blink_setup_completed'; // ✅ NOVO: estado global de setup
+const SETUP_COMPLETED_KEY = 'blink_setup_completed';
+const CAMERA_ENABLED_KEY = 'blink_camera_enabled'; // ✅ GLOBAL, não por aba
 
-/** ✅ NOVO: Verifica se setup foi completado (global, não por aba) */
+/** Verifica se setup foi completado (global) */
 async function isSetupCompleted() {
   try {
     const result = await storageGet(SETUP_COMPLETED_KEY);
@@ -56,7 +62,7 @@ async function isSetupCompleted() {
   }
 }
 
-/** ✅ NOVO: Marca setup como completado */
+/** Marca setup como completado */
 async function markSetupCompleted() {
   try {
     await storageSet({ [SETUP_COMPLETED_KEY]: true });
@@ -67,28 +73,29 @@ async function markSetupCompleted() {
   }
 }
 
-/** grava preferência de câmera para uma aba */
-async function saveCameraPreferenceForTab(tabId, enabled) {
+/** ✅ GLOBAL: Salva se câmera está habilitada (não por aba) */
+async function setCameraEnabled(enabled) {
   try {
-    const result = await storageGet(CAMERA_PREF_KEY);
-    const prefs = result[CAMERA_PREF_KEY] || {};
-    prefs[String(tabId)] = !!enabled;
-    await storageSet({ [CAMERA_PREF_KEY]: prefs });
-    console.log('[Background] saved camera pref for tab', tabId, enabled);
+    await storageSet({ [CAMERA_ENABLED_KEY]: !!enabled });
+    console.log('[Background] 📸 Câmera global:', enabled ? 'HABILITADA' : 'DESABILITADA');
   } catch (err) {
-    console.warn('[Background] saveCameraPreferenceForTab error', err);
+    console.warn('[Background] setCameraEnabled error', err);
     throw err;
   }
 }
 
-/** lê preferência */
-async function getCameraPrefForTab(tabId) {
+/** ✅ GLOBAL: Verifica se câmera está habilitada */
+async function isCameraEnabled() {
   try {
-    const result = await storageGet(CAMERA_PREF_KEY);
-    const prefs = result[CAMERA_PREF_KEY] || {};
-    return !!prefs[String(tabId)];
+    const result = await storageGet(CAMERA_ENABLED_KEY);
+    // Default true se setup foi completado
+    if (result[CAMERA_ENABLED_KEY] === undefined) {
+      const setupDone = await isSetupCompleted();
+      return setupDone; // Se setup completo, assume true
+    }
+    return !!result[CAMERA_ENABLED_KEY];
   } catch (err) {
-    console.warn('[Background] getCameraPrefForTab error', err);
+    console.warn('[Background] isCameraEnabled error', err);
     return false;
   }
 }
@@ -140,11 +147,11 @@ function canInjectInTab(tab) {
   if (!tab || !tab.url) return false;
   const url = tab.url;
   if (url.startsWith('chrome://') ||
-      url.startsWith('edge://') ||
-      url.startsWith('about:') ||
-      url.startsWith('chrome-extension://') ||
-      url === 'chrome://newtab/' ||
-      url.includes('chrome.google.com/webstore')) {
+    url.startsWith('edge://') ||
+    url.startsWith('about:') ||
+    url.startsWith('chrome-extension://') ||
+    url === 'chrome://newtab/' ||
+    url.includes('chrome.google.com/webstore')) {
     return false;
   }
   return true;
@@ -160,48 +167,6 @@ async function isExtensionInjected(tabId) {
   } catch (e) {
     return false;
   }
-}
-
-/** ✅ ATUALIZADO: injeta e decide se inicia câmera */
-async function injectExtension(tabId, retries = 3) {
-  for (let i = 0; i < retries; i++) {
-    try {
-      await chrome.scripting.executeScript({
-        target: { tabId },
-        files: ['content_inject.js']
-      });
-      console.log('[Background] ✅ Extensão injetada na aba:', tabId);
-      await markTabActive(tabId);
-
-      // ✅ Atualizar aba ativa atual
-      currentActiveTabId = tabId;
-
-      try {
-        const setupDone = await isSetupCompleted();
-        const cameraPref = await getCameraPrefForTab(tabId);
-        
-        console.log('[Background] 🔍 Estado:', { setupDone, cameraPref, tabId });
-
-        if (setupDone && cameraPref) {
-          console.log('[Background] 📸 Enviando start-camera');
-          setTimeout(() => {
-            sendCommandToIframe(tabId, { type: 'blink:command', command: 'start-camera' });
-          }, 1000); // ✅ Aumentado para 1s
-        } else {
-          console.log('[Background] ⏸️ Setup incompleto ou câmera desabilitada');
-        }
-      } catch (e) {
-        console.warn('[Background] erro ao decidir iniciar camera', e);
-      }
-
-      return true;
-    } catch (err) {
-      console.warn(`[Background] Tentativa ${i + 1}/${retries} falhou:`, err && err.message);
-      if (i < retries - 1) await new Promise(r => setTimeout(r, 500));
-    }
-  }
-  console.error('[Background] ❌ Falha ao injetar após', retries, 'tentativas');
-  return false;
 }
 
 /** Envia comando para iframe dentro da página */
@@ -237,6 +202,33 @@ async function sendCommandToIframe(tabId, commandObj = { type: 'blink:command', 
     }
   }
   console.warn('[Background] ❌ não conseguiu enviar comando ao iframe após tentativas:', tabId, commandObj);
+  return false;
+}
+
+/** injeta e decide se inicia câmera */
+async function injectExtension(tabId, retries = 3) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        files: ['content_inject.js']
+      });
+      console.log('[Background] ✅ Extensão injetada na aba:', tabId);
+      await markTabActive(tabId);
+
+      // Atualizar aba ativa atual
+      currentActiveTabId = tabId;
+
+      // Aguardar UI estar pronta antes de enviar comandos
+      console.log('[Background] ⏳ Aguardando ui-ready da aba', tabId);
+      
+      return true;
+    } catch (err) {
+      console.warn(`[Background] Tentativa ${i + 1}/${retries} falhou:`, err && err.message);
+      if (i < retries - 1) await new Promise(r => setTimeout(r, 500));
+    }
+  }
+  console.error('[Background] ❌ Falha ao injetar após', retries, 'tentativas');
   return false;
 }
 
@@ -287,10 +279,10 @@ if (chrome.webNavigation && chrome.webNavigation.onHistoryStateUpdated) {
         console.log('[Background] Reinjetando devido a history state update...');
         await injectExtension(tabId);
       } else {
-        // ✅ Só reinicia câmera se setup completo
+        // Só reinicia câmera se setup completo E câmera habilitada
         const setupDone = await isSetupCompleted();
-        const shouldBeOn = await getCameraPrefForTab(tabId);
-        if (setupDone && shouldBeOn) {
+        const cameraOn = await isCameraEnabled();
+        if (setupDone && cameraOn) {
           console.log('[Background] 📸 Reiniciando câmera após navegação SPA');
           setTimeout(() => sendCommandToIframe(tabId, { type: 'blink:command', command: 'start-camera' }), 800);
         }
@@ -301,44 +293,60 @@ if (chrome.webNavigation && chrome.webNavigation.onHistoryStateUpdated) {
   });
 }
 
-// ✅ NOVO: Gerenciamento de aba ativa atual
-let currentActiveTabId = null;
-
-// ✅ NOVO: Listener para mudanças de aba ativa
+// Listener para mudanças de aba ativa
 chrome.tabs.onActivated.addListener(async (activeInfo) => {
   const newTabId = activeInfo.tabId;
   const oldTabId = currentActiveTabId;
-  
+
   console.log('[Background] 🔄 Aba ativada:', newTabId, 'anterior:', oldTabId);
-  
+
   currentActiveTabId = newTabId;
-  
+
   // Verificar se nova aba tem extensão injetada
   const isActive = await isTabActive(newTabId);
-  
+
   if (isActive) {
     console.log('[Background] ✅ Nova aba tem extensão');
-    
-    // Verificar se setup está completo
+
+    // Parar câmera na aba anterior se existir
+    if (oldTabId && oldTabId !== newTabId) {
+      try {
+        await sendCommandToIframe(oldTabId, {
+          type: 'blink:command',
+          command: 'stop-camera'
+        });
+        console.log('[Background] ⏹️ Câmera parada na aba anterior:', oldTabId);
+      } catch (e) {
+        console.warn('[Background] Erro ao parar câmera na aba anterior:', e);
+      }
+    }
+
+    // Verificar se setup está completo E câmera habilitada
     const setupDone = await isSetupCompleted();
-    const cameraPref = await getCameraPrefForTab(newTabId);
-    
-    if (setupDone && cameraPref) {
+    const cameraOn = await isCameraEnabled();
+
+    if (setupDone && cameraOn) {
       console.log('[Background] 📸 Reiniciando câmera na nova aba');
-      
+
       // Dar tempo para aba ativar
       setTimeout(() => {
-        sendCommandToIframe(newTabId, { 
-          type: 'blink:command', 
-          command: 'start-camera' 
+        sendCommandToIframe(newTabId, {
+          type: 'blink:command',
+          command: 'start-camera'
         });
-      }, 500);
+      }, 800);
     }
   }
 });
 
 // tabs.onUpdated (full navigation / reload)
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+  // Limpa rastreamento quando aba é atualizada (reload)
+  if (changeInfo.status === 'loading') {
+    readyTabs.delete(tabId);
+    console.log('[Background] 🔄 Aba', tabId, 'recarregando - removida do rastreamento ready');
+  }
+
   if (changeInfo.status === 'complete') {
     const wasActive = await isTabActive(tabId);
 
@@ -358,23 +366,25 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
         await injectExtension(tabId);
       } else {
         console.log('[Background] ✅ Extensão já presente');
-        
-        // ✅ Reinicia câmera apenas se setup completo
+
+        // Reinicia câmera apenas se setup completo E câmera habilitada
         const setupDone = await isSetupCompleted();
-        const shouldBeOn = await getCameraPrefForTab(tabId);
-        if (setupDone && shouldBeOn) {
+        const cameraOn = await isCameraEnabled();
+        if (setupDone && cameraOn) {
           console.log('[Background] 📸 Reiniciando câmera após reload');
           setTimeout(() => {
             sendCommandToIframe(tabId, { type: 'blink:command', command: 'start-camera' });
-          }, 800);
+          }, 1000);
         }
       }
     }
   }
 });
 
-chrome.tabs.onRemoved.addListener(async (tabId) => {
-  await removeTabFromActive(tabId);
+chrome.tabs.onRemoved.addListener((tabId) => {
+  readyTabs.delete(tabId);
+  removeTabFromActive(tabId);
+  console.log('[Background] 🗑️ Aba', tabId, 'removida do rastreamento');
 });
 
 // ----------------------
@@ -386,39 +396,21 @@ chrome.action.onClicked.addListener(async (tab) => {
       console.warn('[Blink] ação clicada mas aba inválida', tab);
       return;
     }
+    const url = tab.url || '';
 
     if (!canInjectInTab(tab)) {
-      console.warn('[Blink] tentativa de injeção em URL não permitida:', tab.url);
-      chrome.tabs.create({ url: 'https://www.google.com', active: true }, async (newTab) => {
-        chrome.tabs.onUpdated.addListener(function listener(tId, info) {
-          if (tId === newTab.id && info.status === 'complete') {
-            chrome.tabs.onUpdated.removeListener(listener);
-            injectExtension(newTab.id);
-          }
-        });
-      });
+      console.warn('[Blink] tentativa de injeção em URL não permitida:', url);
       return;
     }
 
-    console.log(`[Blink] tentando injetar overlay em tab ${tab.id} ${tab.url}`);
+    console.log(`[Blink] 👉 Injetando overlay na aba ${tab.id}`);
 
-    const alreadyInjected = await isExtensionInjected(tab.id);
+    await injectExtension(tab.id);
 
-    if (alreadyInjected) {
-      console.log('[Blink] Extensão já injetada, removendo...');
-      await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        func: () => {
-          const root = document.getElementById('blink-extension-root');
-          if (root) root.remove();
-        }
-      });
-      await removeTabFromActive(tab.id);
-    } else {
-      await injectExtension(tab.id);
-    }
+    console.log('[Blink] ✅ Injeção completa. Aguardando ui-ready...');
+
   } catch (err) {
-    console.error('[Blink] script injection failed:', err);
+    console.error('[Blink] ❌ Falha na injeção:', err);
   }
 });
 
@@ -430,18 +422,67 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
 
   console.log('[Background] Mensagem recebida:', msg.type, msg);
 
+  if (msg.type === 'ui-ready') {
+    const tabId = sender.tab?.id;
+    if (!tabId) {
+      sendResp({ ok: false, error: 'no-tab' });
+      return false;
+    }
+
+    // Evita processar múltiplos ui-ready da mesma aba
+    if (readyTabs.has(tabId)) {
+      console.log('[Background] ⚠️ UI-ready duplicado da aba', tabId, '(ignorando)');
+      sendResp({ ok: true, already: true });
+      return false;
+    }
+
+    readyTabs.add(tabId);
+    console.log('[Background] 🤝 UI da aba', tabId, 'pronta para receber comandos');
+
+    (async () => {
+      try {
+        const setupDone = await isSetupCompleted();
+        const cameraOn = await isCameraEnabled();
+
+        console.log('[Background] 📊 Estado global:', { setupDone, cameraOn, tabId });
+
+        if (setupDone && cameraOn) {
+          console.log('[Background] 📸 Condições OK → enviando start-camera para aba', tabId);
+
+          // Delay para garantir que iframe está 100% pronto
+          setTimeout(() => {
+            sendCommandToIframe(tabId, {
+              type: 'blink:command',
+              command: 'start-camera'
+            });
+          }, 500);
+        } else {
+          console.log('[Background] ⏸️ Setup não completo ou câmera desabilitada');
+        }
+
+        sendResp({ ok: true });
+      } catch (err) {
+        console.error('[Background] Erro ao processar ui-ready:', err);
+        sendResp({ ok: false, error: err.message });
+      }
+    })();
+
+    return true; // async response
+  }
+
   // save-state
   if (msg.type === 'save-state') {
     (async () => {
       try {
         await saveState(msg.state);
-        
-        // ✅ CRÍTICO: Se setupCompleted=true, marcar globalmente
+
+        // CRÍTICO: Se setupCompleted=true, marcar globalmente
         if (msg.state && msg.state.setupCompleted === true) {
           await markSetupCompleted();
-          console.log('[Background] ✅ Setup marcado como completo via save-state');
+          await setCameraEnabled(true); // ✅ Habilita câmera globalmente
+          console.log('[Background] ✅ Setup marcado como completo + câmera habilitada via save-state');
         }
-        
+
         sendResp({ ok: true });
       } catch (err) {
         console.error('[Background] save-state error', err);
@@ -457,11 +498,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
       try {
         const state = await loadState();
         const setupCompleted = await isSetupCompleted();
-        
-        // ✅ Garante que setupCompleted sempre está no estado
+        const cameraEnabled = await isCameraEnabled();
+
+        // Garante que setupCompleted e cameraEnabled sempre estão no estado
         const finalState = state || {};
         finalState.setupCompleted = setupCompleted;
-        
+        finalState.cameraEnabled = cameraEnabled;
+
         console.log('[Background] 📦 Estado carregado:', finalState);
         sendResp({ ok: true, state: finalState });
       } catch (err) {
@@ -472,12 +515,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
     return true;
   }
 
-  // ✅ NOVO: check-setup-status
+  // check-setup-status
   if (msg.type === 'check-setup-status') {
     (async () => {
       try {
         const setupCompleted = await isSetupCompleted();
-        sendResp({ ok: true, setupCompleted });
+        const cameraEnabled = await isCameraEnabled();
+        sendResp({ ok: true, setupCompleted, cameraEnabled });
       } catch (err) {
         sendResp({ ok: false, error: err?.message });
       }
@@ -518,34 +562,27 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
     return false;
   }
 
-  // set-camera-pref
+  // set-camera-pref - ✅ AGORA GLOBAL
   if (msg.type === 'set-camera-pref') {
     (async () => {
-      const { tabId: explicitTabId, enabled } = msg;
-      const tId = explicitTabId || sender.tab?.id;
-      if (!tId) {
-        sendResp({ ok: false, error: 'no-tab-id' });
-        return;
-      }
+      const { enabled } = msg;
       try {
-        await saveCameraPreferenceForTab(tId, !!enabled);
-        
-        // ✅ Só envia start-camera se setup completo
+        await setCameraEnabled(!!enabled);
+
+        // Se habilitando, enviar start-camera para aba atual
         if (enabled) {
           const setupDone = await isSetupCompleted();
-          if (setupDone) {
-            console.log('[Background] 📸 Enviando start-camera (pref habilitada + setup completo)');
+          if (setupDone && currentActiveTabId) {
+            console.log('[Background] 📸 Enviando start-camera (pref habilitada globalmente)');
             setTimeout(() => {
-              sendCommandToIframe(tId, { 
-                type: 'blink:command', 
-                command: 'start-camera' 
+              sendCommandToIframe(currentActiveTabId, {
+                type: 'blink:command',
+                command: 'start-camera'
               });
-            }, 400);
-          } else {
-            console.log('[Background] ⏸️ Setup não completo, não enviando start-camera');
+            }, 600);
           }
         }
-        
+
         sendResp({ ok: true });
       } catch (err) {
         console.error('[Background] set-camera-pref error', err);
@@ -562,7 +599,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
       active: true
     }).then(tab => {
       console.log('[Background] Nova aba criada:', tab.id);
-      
+
       const listener = (tabId, info) => {
         if (tabId === tab.id && info.status === 'complete') {
           chrome.tabs.onUpdated.removeListener(listener);
@@ -571,7 +608,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
             .catch(err => sendResp({ ok: false, error: err?.message }));
         }
       };
-      
+
       chrome.tabs.onUpdated.addListener(listener);
     }).catch(err => {
       console.error('[Background] Erro ao criar aba:', err);
@@ -584,40 +621,40 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
   if (msg.type === 'tab-previous' || msg.type === 'tab-next') {
     (async () => {
       try {
-        const tabs = await new Promise(r => 
+        const tabs = await new Promise(r =>
           chrome.tabs.query({ currentWindow: true }, r)
         );
-        
+
         if (tabs.length <= 1) {
           sendResp({ ok: false, message: 'Apenas uma aba aberta' });
           return;
         }
 
-        const activeTabs = await new Promise(r => 
+        const activeTabs = await new Promise(r =>
           chrome.tabs.query({ active: true, currentWindow: true }, r)
         );
-        
+
         const currentTab = activeTabs[0];
         const currentIndex = tabs.findIndex(t => t.id === currentTab.id);
-        
+
         let targetIndex;
         if (msg.type === 'tab-previous') {
           targetIndex = currentIndex > 0 ? currentIndex - 1 : tabs.length - 1;
         } else {
           targetIndex = currentIndex < tabs.length - 1 ? currentIndex + 1 : 0;
         }
-        
+
         const targetTab = tabs[targetIndex];
 
         if (!canInjectInTab(targetTab)) {
-          sendResp({ 
-            ok: false, 
-            message: 'Extensão não pode ser executada nesta página' 
+          sendResp({
+            ok: false,
+            message: 'Extensão não pode ser executada nesta página'
           });
           return;
         }
 
-        await new Promise(r => 
+        await new Promise(r =>
           chrome.tabs.update(targetTab.id, { active: true }, r)
         );
 
@@ -635,7 +672,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
 
         const injected = await isExtensionInjected(targetTab.id);
         if (!injected) await injectExtension(targetTab.id);
-        
+
         sendResp({ ok: true, tabId: targetTab.id });
       } catch (err) {
         console.error('[Background] tab navigation error', err);
@@ -652,11 +689,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
         sendResp({ ok: false, message: 'Não pode fechar a última aba' });
         return;
       }
-      
+
       chrome.tabs.query({ active: true, currentWindow: true }, async (activeTabs) => {
         const currentTab = activeTabs[0];
         await removeTabFromActive(currentTab.id);
-        
+
         chrome.tabs.remove(currentTab.id, () => {
           console.log('[Background] Aba fechada:', currentTab.id);
           sendResp({ ok: true });
