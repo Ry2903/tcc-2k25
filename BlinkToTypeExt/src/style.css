@@ -536,3 +536,8 @@ body {
 #controls .config-group.row-selected label {
   color: #fff;
 }
+
+/* Ocultar o botão target incompleto */
+#tool-target {
+  display: none !important;
+}

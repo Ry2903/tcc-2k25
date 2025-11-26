@@ -43,6 +43,21 @@ let selectingColumn = false;
 let controlsRowIndex = 0;
 let controlsColIndex = 0;
 
+if (typeof window !== 'undefined') {
+  Object.defineProperty(window.BlinkDetection || {}, 'EAR_THRESHOLD', {
+    get: () => EAR_THRESHOLD,
+    set: (v) => { EAR_THRESHOLD = v; }
+  });
+  Object.defineProperty(window.BlinkDetection || {}, 'EAR_CONSEC_FRAMES', {
+    get: () => EAR_CONSEC_FRAMES,
+    set: (v) => { EAR_CONSEC_FRAMES = v; }
+  });
+  Object.defineProperty(window.BlinkDetection || {}, 'DEBOUNCE_AFTER_BLINK', {
+    get: () => DEBOUNCE_AFTER_BLINK,
+    set: (v) => { DEBOUNCE_AFTER_BLINK = v; }
+  });
+}
+
 /* ---------------- DEBUG E REGISTRY ---------------- */
 if (typeof window !== 'undefined' && window.__kb_debug === undefined) {
   window.__kb_debug = true;
@@ -664,27 +679,73 @@ function ensureControlsBaseGroups() {
     return b;
   }
 
+  // ✅ THRESHOLD
   const thrDec = mkBtn('thr-dec', '<');
   const thrSpan = document.createElement('span');
   thrSpan.id = 'threshold-val';
-  thrSpan.textContent = (typeof window.EAR_THRESHOLD !== 'undefined') ? String(window.EAR_THRESHOLD) : '0.279';
+  thrSpan.textContent = '0.279';
   const thrInc = mkBtn('thr-inc', '>');
   mkGroup('Threshold', [thrDec, thrSpan, thrInc]);
 
+  // ✅ Wiring threshold buttons
+  thrDec.onclick = () => {
+    if (window.BlinkDetection && typeof window.BlinkDetection.EAR_THRESHOLD !== 'undefined') {
+      window.BlinkDetection.EAR_THRESHOLD = Math.max(0.05, window.BlinkDetection.EAR_THRESHOLD - 0.01);
+      thrSpan.textContent = window.BlinkDetection.EAR_THRESHOLD.toFixed(3);
+    }
+  };
+  thrInc.onclick = () => {
+    if (window.BlinkDetection && typeof window.BlinkDetection.EAR_THRESHOLD !== 'undefined') {
+      window.BlinkDetection.EAR_THRESHOLD = Math.min(0.5, window.BlinkDetection.EAR_THRESHOLD + 0.01);
+      thrSpan.textContent = window.BlinkDetection.EAR_THRESHOLD.toFixed(3);
+    }
+  };
+
+  // ✅ FRAMES
   const frmDec = mkBtn('frm-dec', '<');
   const frmSpan = document.createElement('span');
   frmSpan.id = 'frames-val';
-  frmSpan.textContent = (typeof window.EAR_CONSEC_FRAMES !== 'undefined') ? String(window.EAR_CONSEC_FRAMES) : '1.5';
+  frmSpan.textContent = '1.5';
   const frmInc = mkBtn('frm-inc', '>');
   mkGroup('Frames consecutivos', [frmDec, frmSpan, frmInc]);
 
+  // ✅ Wiring frames buttons
+  frmDec.onclick = () => {
+    if (window.BlinkDetection && typeof window.BlinkDetection.EAR_CONSEC_FRAMES !== 'undefined') {
+      window.BlinkDetection.EAR_CONSEC_FRAMES = Math.max(1, window.BlinkDetection.EAR_CONSEC_FRAMES - 0.1);
+      frmSpan.textContent = window.BlinkDetection.EAR_CONSEC_FRAMES.toFixed(1);
+    }
+  };
+  frmInc.onclick = () => {
+    if (window.BlinkDetection && typeof window.BlinkDetection.EAR_CONSEC_FRAMES !== 'undefined') {
+      window.BlinkDetection.EAR_CONSEC_FRAMES = Math.min(6, window.BlinkDetection.EAR_CONSEC_FRAMES + 0.1);
+      frmSpan.textContent = window.BlinkDetection.EAR_CONSEC_FRAMES.toFixed(1);
+    }
+  };
+
+  // ✅ DEBOUNCE
   const debDec = mkBtn('deb-dec', '<');
   const debSpan = document.createElement('span');
   debSpan.id = 'debounce-val';
-  debSpan.textContent = (typeof window.DEBOUNCE_AFTER_BLINK !== 'undefined') ? String(window.DEBOUNCE_AFTER_BLINK) : '1.0';
+  debSpan.textContent = '1.0';
   const debInc = mkBtn('deb-inc', '>');
   mkGroup('Debounce', [debDec, debSpan, debInc]);
 
+  // ✅ Wiring debounce buttons
+  debDec.onclick = () => {
+    if (window.BlinkDetection && typeof window.BlinkDetection.DEBOUNCE_AFTER_BLINK !== 'undefined') {
+      window.BlinkDetection.DEBOUNCE_AFTER_BLINK = Math.max(0, window.BlinkDetection.DEBOUNCE_AFTER_BLINK - 0.1);
+      debSpan.textContent = window.BlinkDetection.DEBOUNCE_AFTER_BLINK.toFixed(1);
+    }
+  };
+  debInc.onclick = () => {
+    if (window.BlinkDetection && typeof window.BlinkDetection.DEBOUNCE_AFTER_BLINK !== 'undefined') {
+      window.BlinkDetection.DEBOUNCE_AFTER_BLINK = Math.min(10, window.BlinkDetection.DEBOUNCE_AFTER_BLINK + 0.1);
+      debSpan.textContent = window.BlinkDetection.DEBOUNCE_AFTER_BLINK.toFixed(1);
+    }
+  };
+
+  // ✅ ROW INTERVAL
   const rowDec = mkBtn('row-interval-dec', '<');
   const rowSpan = document.createElement('span');
   rowSpan.id = 'row-interval-val';
@@ -692,33 +753,61 @@ function ensureControlsBaseGroups() {
   const rowInc = mkBtn('row-interval-inc', '>');
   mkGroup('Intervalo entre linhas', [rowDec, rowSpan, rowInc]);
 
+  // ✅ Wiring row interval buttons
+  rowDec.onclick = () => {
+    rowInterval = Math.max(200, rowInterval - 100);
+    rowSpan.textContent = `${rowInterval} ms`;
+    resetSelection();
+  };
+  rowInc.onclick = () => {
+    rowInterval = Math.min(5000, rowInterval + 100);
+    rowSpan.textContent = `${rowInterval} ms`;
+    resetSelection();
+  };
+
+  // ✅ DETECTION TOGGLE
   const toggleBtn = document.createElement('button');
   toggleBtn.id = 'toggle-detection';
   toggleBtn.className = 'icon-btn';
-  toggleBtn.textContent = 'Ativar/Desativar';
+  toggleBtn.textContent = 'Detecção: ON';
+  toggleBtn.dataset.active = 'true';
   mkGroup('\u00A0', [toggleBtn]);
 
+  // ✅ Wiring detection toggle
+  toggleBtn.onclick = () => {
+    const isActive = toggleBtn.dataset.active === 'true';
+    toggleBtn.dataset.active = String(!isActive);
+    toggleBtn.textContent = !isActive ? 'Detecção: ON' : 'Detecção: OFF';
+
+    if (window.BlinkDetection) {
+      if (!isActive) {
+        // Ligar detecção
+        if (window.BlinkDetection.startCamera) {
+          window.BlinkDetection.startCamera().catch(e => console.error('Erro ao iniciar câmera:', e));
+        }
+      } else {
+        // Desligar detecção
+        if (window.BlinkDetection.stop) {
+          window.BlinkDetection.stop();
+        }
+      }
+    }
+
+    document.dispatchEvent(new CustomEvent('detection:toggled', { detail: { active: !isActive } }));
+  };
+
+  // ✅ GEAR BUTTON (voltar para toolbar)
   const gearBtn = document.createElement('button');
   gearBtn.id = 'settings-gear-btn';
   gearBtn.className = 'icon-btn';
   gearBtn.innerHTML = getIconHTML('gear');
-  gearBtn.addEventListener('click', () => {
-    setActivePanel('toolbar');
-    resetSelection();
-  });
   mkGroup('\u00A0', [gearBtn]);
 
-  rowDec.addEventListener('click', () => {
-    rowInterval = Math.max(200, rowInterval - 100);
-    updateRowIntervalDisplay();
+  // ✅ Wiring gear button
+  gearBtn.onclick = () => {
+    setActivePanel('toolbar');
     resetSelection();
-  });
-
-  rowInc.addEventListener('click', () => {
-    rowInterval = Math.min(5000, rowInterval + 100);
-    updateRowIntervalDisplay();
-    resetSelection();
-  });
+  };
 
   if (window.__kb_debug) console.log('ensureControlsBaseGroups -> criados');
 }
@@ -1198,8 +1287,8 @@ function criarToolbar() {
   const group = document.createElement('div');
   group.className = 'tool-group';
 
+  // ✅ REMOVIDO: { id: 'tool-target', icon: 'target', action: 'target' }
   const buttons = [
-    { id: 'tool-target', icon: 'target', action: 'target' },
     { id: 'tool-tools', icon: 'tools', action: 'tools' },
     { id: 'tool-plus', icon: 'plus', action: 'plus' },
     { id: 'tool-back', icon: 'forward_tab_rev', action: 'back' },
@@ -1216,17 +1305,40 @@ function criarToolbar() {
     btn.innerHTML = getIconHTML(b.icon);
     btn.dataset.action = b.action;
 
-    btn.addEventListener('click', () => {
+    btn.onclick = () => {
       if (window.__kb_debug) console.log('[KB] Toolbar button clicked:', b.action);
 
-      if (b.action === 'numpad') setActivePanel('numpad');
-      else if (b.action === 'alpha') setActivePanel('keyboard');
-      else if (b.action === 'tools') setActivePanel('controls');
-      else if (b.action === 'target') mostrarPainelSelecaoCampo();
-      else document.dispatchEvent(new CustomEvent('toolbar:action', { detail: { action: b.action } }));
+      if (b.action === 'numpad') {
+        setActivePanel('numpad');
+      }
+      else if (b.action === 'alpha') {
+        setActivePanel('keyboard');
+      }
+      else if (b.action === 'tools') {
+        setActivePanel('controls');
+      }
+      else if (b.action === 'plus') {
+        abrirNovaAba();
+        resetSelection();
+      }
+      else if (b.action === 'back') {
+        irParaAbaAnterior();
+        resetSelection();
+      }
+      else if (b.action === 'forward') {
+        irParaProximaAba();
+        resetSelection();
+      }
+      else if (b.action === 'x') {
+        fecharAbaAtual();
+        resetSelection();
+      }
+      else {
+        document.dispatchEvent(new CustomEvent('toolbar:action', { detail: { action: b.action } }));
+      }
 
       try { resetSelection(); } catch (e) { }
-    });
+    };
 
     group.appendChild(btn);
   });
@@ -1969,32 +2081,6 @@ async function iniciarDeteccaoAutomatica() {
 window.iniciarDeteccaoAutomatica = iniciarDeteccaoAutomatica;
 
 /* ============ EVENT LISTENERS ============ */
-document.addEventListener('toolbar:action', (e) => {
-  const action = e.detail && e.detail.action;
-  if (window.__kb_debug) console.log('[KB] toolbar:action:', action);
-
-  if (action === 'target') {
-    if (window.__kb_debug) console.log('[KB] Acionando target...');
-    acionarTarget();
-  }
-  else if (action === 'back') {
-    if (window.__kb_debug) console.log('[KB] Back');
-    irParaAbaAnterior();
-  }
-  else if (action === 'forward') {
-    if (window.__kb_debug) console.log('[KB] Forward');
-    irParaProximaAba();
-  }
-  else if (action === 'plus') {
-    if (window.__kb_debug) console.log('[KB] Plus');
-    abrirNovaAba();
-  }
-  else if (action === 'x') {
-    if (window.__kb_debug) console.log('[KB] X');
-    fecharAbaAtual();
-  }
-}, false);
-
 document.addEventListener('DOMContentLoaded', () => {
   init().catch(console.error);
 });
